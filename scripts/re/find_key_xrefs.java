@@ -27,6 +27,30 @@ public class find_key_xrefs extends GhidraScript {
         dumpRefs("server static public", Long.parseLong(args[1], 16));
         dumpRefs("static group P hex-string", Long.parseLong(args[2], 16));
         dumpRefs("ephemeral group P hex-string", Long.parseLong(args[3], 16));
+        decompileReferring(Long.parseLong(args[0], 16));
+        decompileReferring(Long.parseLong(args[1], 16));
+        println("DONE-SCAN");
+    }
+
+    /** Decompile every function containing a reference to the given address. */
+    private void decompileReferring(long va) {
+        var ifc = new ghidra.app.decompiler.DecompInterface();
+        ifc.openProgram(currentProgram);
+        var addr = toAddr(va);
+        var functions = new java.util.TreeMap<Address, Function>();
+        var it = currentProgram.getReferenceManager().getReferencesTo(addr);
+        while (it.hasNext()) {
+            var fn = getFunctionContaining(it.next().getFromAddress());
+            if (fn != null) functions.put(fn.getEntryPoint(), fn);
+        }
+        println("== decompiling " + functions.size() + " function(s) referencing 0x" + Long.toHexString(va) + " ==");
+        for (Function fn : functions.values()) {
+            var res = ifc.decompileFunction(fn, 120, monitor);
+            println("### FUNCTION 0x" + fn.getEntryPoint().toString() + " " + fn.getName());
+            println(res.getDecompiledFunction() == null ? "(decompile failed)"
+                    : res.getDecompiledFunction().getC());
+        }
+        ifc.dispose();
         println("DONE-SCAN");
     }
 }
