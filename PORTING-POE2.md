@@ -132,3 +132,23 @@ gateway named `America` to match `gateway_id=America` in
 **Consequence:** `LoginKeys`/`LoginHandshake`/`LoginCrypto` port as-is once the
 PoE2 `ClientImage` offsets are derived — the wire format of the first exchange
 is unchanged.
+
+## Wave 2 — live handshake exchange captured (2026-10-31, post-restart run pending)
+
+`login_capture_stub2.py` (server-speaks-first) + the LOG IN click:
+
+- The PoE2 client **connects to the gateway at the login screen** (no click
+  needed) and immediately sends its 134-byte C→S `0x0002` — framing identical
+  to PoE1 (`0002 | 0080 | <128 B ephemeral DH public> | 0000`). **Client
+  speaks first**, same as PoE1.
+- The stub's dummy S→C `0x0002` reply (right framing, dummy key+sig) got
+  **no response** — the client stayed connected ~90 s, sent nothing more, then
+  the connection dropped on idle timeout. So either the S→C framing differs
+  in PoE2 or the client silently discarded the unverifiable signature.
+  Ghidra decompile of the group-parsing functions (running) will disambiguate.
+
+**Consequence:** the login handshake is close to PoE1's; the port's next
+concrete deliverable is a *real* S→C `0x0002` — which needs the DSA signing
+key (keygen works: the SPKI locator + domain parse are verified) and the
+client static private location (Ghidra decompile of the group-parsing
+functions at `0x14219923c`–`0x1421a62d0` is the source).
