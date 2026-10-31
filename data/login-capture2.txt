@@ -1,0 +1,6 @@
+[23:46:50.664] capture stub (server-speaks-first) listening on 127.0.0.1:21262; logging to data/login-capture2.txt
+[23:48:53.202] connect from ('127.0.0.1', 54549)
+[23:48:53.202] sent dummy S->C 0x0002 (190 bytes); waiting for client...
+[23:48:53.241] C->S msg#1 134 bytes: 00020080b1dfc0ba32571354209b2092cbeac4580cf888d4e7fe8c53c7aded080213ad73a9f1f421363b1d7d15dd2ffa94c0415062ae8ce548b5c54fa6bc03731492dc01779d8b34988e7d35ddf19c33154125e70f54c9fb5a7e6f7fb96517765f516c15...
+[23:48:53.241] re-sent dummy S->C 0x0002 after first client message
+[23:50:23.256] ('127.0.0.1', 54549) idle timeout (90s) - client sent nothing

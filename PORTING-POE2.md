@@ -111,3 +111,24 @@ split), and the per-version packet/message set.
 `git push` hangs on this machine — publish via the GitHub REST Git Data API
 (blobs → tree → commit → ref) using the PAT for user `Ehco` in
 `C:\Users\Administrator\.git-credentials`. Never print the token.
+
+## Wave 1.5 — live capture against the real client (2026-10-31)
+
+`scripts/re/capture_login_session.py` + `login_capture_stub2.py` captured the
+real client's first login message by redirecting `gateway_list.txt` (UTF-16LE,
+gateway named `America` to match `gateway_id=America` in
+`poe2_production_Config.ini`) to a local stub:
+
+- **The client connects at the login screen and speaks FIRST**, before any
+  credentials: C→S `0002 | 0080 | <128 B ephemeral DH public> | 0000` — 134
+  bytes, byte-for-byte the same framing as PoE1's login handshake.
+- The static DH half is still in play (no static public on the wire), so the
+  client static private key must be in the binary — raw 384-byte blob,
+  location TBD via the Ghidra decompile.
+- The stub's dummy S→C reply (right framing, wrong key/sig) was accepted at
+  the transport level; the client stays connected awaiting a valid DSA
+  signature (`data/login-capture2.txt` has the full dump).
+
+**Consequence:** `LoginKeys`/`LoginHandshake`/`LoginCrypto` port as-is once the
+PoE2 `ClientImage` offsets are derived — the wire format of the first exchange
+is unchanged.
