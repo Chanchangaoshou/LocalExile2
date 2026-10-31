@@ -46,10 +46,21 @@ real client as the renderer — the approach proven by
    clustered in .rdata (`0x350f330`–`0x350f860`): static P `cd8fd4b7…` (768 hex
    chars), static Q `66c7ea5b…`, ephemeral Q `62e8fffb…`, ephemeral P
    `c5d1fff6…` — byte-identical to `LoginGroups.cs`. **LoginGroups.cs ports
-   unchanged.** No client-static-private string exists anywhere, so that key is
-   either relocated raw, runtime-generated, or the static DH half changed —
-   resolve in wave 1 via disassembly (PoE1: "Rhoa" ctor `0x140e02170`) and
-   live traffic capture.
+   unchanged.** (`scripts/re/find_private_key.py` maps the whole string
+   neighborhood: `RSA`, `PublicElement`, `SubgroupOrder…`.)
+6. **Server static public located and verified.** The 384-byte blob at file
+   `0x2f0b4d0` (VA `0x14310C6D0`) — immediately *before* the SPKI, vs PoE1's
+   `+0x4d0` after — satisfies `y^q ≡ 1 (mod P)` in the static group
+   (`scripts/recon/scan_dh_groups.py` + inline verification).
+7. **Login crypto code cluster found** via rip-relative xref scan
+   (`scripts/re/find_private_key.py`): functions at
+   `0x140d30830`–`0x140d333c0` reference the SPKI/static-pub region and the
+   group-string literals; the group-parsing ctor lives around
+   `0x14219923c`–`0x1421a62d0`. Ghidra headless (12.1.4, installed) is
+   decompiling these — the client static private key's location is the
+   remaining unknown (it may be relocated, runtime-generated, or dropped from
+   the static DH half; a live-traffic sniff of msg `0x0002` C→S would settle
+   it if the decompile is ambiguous).
 
 **Implication:** the login-stack port is now close to mechanical: identical
 crypto family, identical DH groups, DER-prefix locator unchanged. Open items:
