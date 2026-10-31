@@ -1,0 +1,85 @@
+# --- Game client and its content: copyrighted, never commit ---
+/Client/
+*.ggpk
+*.bundle.bin
+*.dat
+*.dat64
+*.datc64
+Game*.exe
+PathOfExile*.exe
+
+# --- Tools/: third-party programs and analysis outputs stay local; our own tools are source ---
+# Not ours: Ghidra, JDK, ooz's npm packages, the client backup, the Ghidra project (built from the client binary)
+# and Tools/re/out (decompiled client code). See Agents/docs/re/tooling.md for how to set them up.
+/Tools/*
+!/Tools/PoEDataExtractor/
+!/Tools/ooz/
+
+# --- Data extracted from the client, and local secrets ---
+# data/tables (extracted game tables), data/walkability (Frida dumps), data/login-keys.json (server signing key),
+# data/instance-secret.bin (instance key secret), data/dev-login.txt (dev account), data/accounts*.json.
+# Only the dat schema is source.
+/data/*
+!/data/schema/
+/artifacts/
+/captures/
+
+# Built mods (Mods/Source/ builds into Mods/Binaries/<id>/; Agents/docs/dev/modding.md). Mods from elsewhere go there too.
+/Mods/Binaries/
+
+# Active gameplay tuning is local; commit reusable defaults, not a server's current settings.
+/config/ruthless.json
+
+# --- Secrets ---
+*.pfx
+*.p12
+*.key
+*.pem
+.env
+.env.*
+*secret*
+!**/*Secret*.cs
+
+# --- Machine-local tool config (absolute paths to this PC) ---
+.mcp.json
+.claude/
+.opencode/
+.vs/
+.vscode/
+.idea/
+
+# --- .NET ---
+bin/
+obj/
+*.user
+*.suo
+TestResults/
+
+# --- Node / Python ---
+node_modules/
+__pycache__/
+.venv*/
+venv/
+*.pyc
+
+# --- Logs / temp ---
+/logs/
+*.log
+*.err
+*.tmp
+
+# --- Local archive (Game repo history) ---
+/.archive/
+
+# --- OS ---
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# --- Local agent handoff notes ---
+/HANDOFF.md
+/HANDOFF-history.md
+# levelgen's last gate run (the baseline beside it is committed)
+/scripts/re/levelgen/gate-latest.json
+/scripts/re/levelgen/survey-latest.json
+/scripts/re/levelgen/loads-latest.json
