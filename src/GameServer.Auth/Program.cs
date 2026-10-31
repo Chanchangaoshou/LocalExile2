@@ -35,10 +35,32 @@ switch (cmd)
     {
         string outPath = args.Length > 2 ? args[2] : DefaultKeys;
         if (File.Exists(outPath)) { Console.Error.WriteLine($"[auth] {outPath} exists; delete it to regenerate."); return 1; }
-        var keys = LoginServerKeys.Generate(new ClientImage(File.ReadAllBytes(args[1])));
+        var image = ClientImage.Load(File.ReadAllBytes(args[1]));
+        Console.WriteLine($"[auth] {image.Layout.Name}: login key blobs at file offset 0x{image.Offset:x}");
+        var keys = LoginServerKeys.Generate(image);
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outPath))!);
         File.WriteAllText(outPath, keys.ToJson());
         Console.WriteLine($"[auth] wrote {outPath}");
+        return 0;
+    }
+    case "probe" when args.Length >= 2:
+    {
+        var image = ClientImage.Load(File.ReadAllBytes(args[1]));
+        var key = image.ReadVerifyKey();
+        Console.WriteLine($"[auth] {image.Layout.Name}: SPKI at file offset 0x{image.Offset:x}, " +
+            $"DSA p {key.P.GetBitLength()} bits, q {key.Q.GetBitLength()} bits, y {key.Y.GetBitLength()} bits");
+        var ssoText = image.Layout.ServerStaticPublicOffset is int sso
+            ? (sso < 0 ? $"-0x{(-sso):x}" : $"+0x{sso:x}") : "(not mapped)";
+        var csoText = image.Layout.ClientStaticPrivateOffset is int cso
+            ? (cso < 0 ? $"-0x{(-cso):x}" : $"+0x{cso:x}") : "(not mapped)";
+        Console.WriteLine($"[auth] server static public at SPKI{ssoText} (rel.): " +
+            (image.Layout.ServerStaticPublicOffset is int _
+                ? (LoginGroups.Static.IsValidElement(image.ReadServerStaticPublic()) ? "valid subgroup element" : "NOT a subgroup element")
+                : "not mapped"));
+        Console.WriteLine($"[auth] client static private at SPKI{csoText} (rel.): " +
+            (image.Layout.ClientStaticPrivateOffset is int _
+                ? (image.ReadClientStaticPrivate() > 0 ? "non-zero exponent" : "zeroed")
+                : "not mapped"));
         return 0;
     }
     case "patch" when args.Length >= 3:
@@ -46,8 +68,8 @@ switch (cmd)
         if (Path.GetFullPath(args[1]).Equals(Path.GetFullPath(args[2]), StringComparison.OrdinalIgnoreCase))
         { Console.Error.WriteLine("[auth] refusing to overwrite the input; give a different output path."); return 1; }
         var keys = LoginServerKeys.FromJson(File.ReadAllText(args.Length > 3 ? args[3] : DefaultKeys));
-        var image = new ClientImage(File.ReadAllBytes(args[1]));
-        Console.WriteLine($"[auth] login key blobs at file offset 0x{image.Offset:x}");
+        var image = ClientImage.Load(File.ReadAllBytes(args[1]));
+        Console.WriteLine($"[auth] {image.Layout.Name}: login key blobs at file offset 0x{image.Offset:x}");
         image.Patch(keys);
         File.WriteAllBytes(args[2], image.Bytes);
         Console.WriteLine($"[auth] wrote {args[2]}");
@@ -57,7 +79,7 @@ switch (cmd)
         await Serve(LoginServerKeys.FromJson(File.ReadAllText(args.Length > 1 ? args[1] : DefaultKeys)));
         return 0;
     default:
-        Console.Error.WriteLine("usage: GameServer.Auth keygen <Game.exe> [keys.json] | patch <Game.exe> <out.exe> [keys.json] | serve [keys.json]");
+        Console.Error.WriteLine("usage: GameServer.Auth probe <Game.exe> | keygen <Game.exe> [keys.json] | patch <Game.exe> <out.exe> [keys.json] | passwd <account> <password> | serve [keys.json]");
         return 2;
 }
 }

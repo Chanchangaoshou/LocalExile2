@@ -23,7 +23,7 @@ public sealed record LoginServerKeys(DsaKey Signing, BigInteger ServerStaticPriv
         {
             BigInteger x = Big.RandomBelow(original.Q - 1) + 1;
             signing = original with { X = x, Y = BigInteger.ModPow(original.G, x, original.P) };
-        } while (ClientImage.EncodeVerifyKey(signing).Length != ClientImage.VerifyKeyLength);
+        } while (ClientImage.EncodeVerifyKey(signing).Length != client.VerifyKeyLength);
         return new LoginServerKeys(signing, LoginGroups.Static.RandomExponent(),
             LoginGroups.Static.PublicFor(client.ReadClientStaticPrivate()));
     }
@@ -48,26 +48,59 @@ public sealed record LoginServerKeys(DsaKey Signing, BigInteger ServerStaticPriv
 }
 
 /// <summary>
-/// The login key blobs inside the client executable. They sit together in .rdata and are only referenced from
-/// 0x14213e610 (3.29.3b: VA 0x142fc0150 / 0x142fc04a0 / 0x142fc0620). Located by the DER header, not by fixed offsets.
+/// Per-client layout of the login key blobs around the DER-encoded X.509 SPKI.
+/// The blobs are located relative to the SPKI, which itself is found by the DER
+/// prefix (no fixed file offsets), so a layout only describes adjacency.
 /// </summary>
-public sealed class ClientImage(byte[] bytes)
+public sealed record ClientLayout(
+    string Name,
+    int VerifyKeyLength,
+    int? ClientStaticPrivateOffset,
+    int? ServerStaticPublicOffset,
+    int StaticLength)
 {
-    public const int VerifyKeyLength = 0x346;        // X.509 SubjectPublicKeyInfo, DSA p=2048 q=224
-    private const int ClientStaticPrivateOffset = 0x350; // 384 bytes, exponent in the 3072-bit group
-    private const int ServerStaticPublicOffset = 0x4d0;  // 384 bytes, element of the 3072-bit group
-    private const int StaticLength = 384;
+    /// <summary>PoE1 3.29.3b: client static private after the SPKI, server static public after that.</summary>
+    public static readonly ClientLayout Poe1_3293b = new("PoE1 3.29.3b", 0x346, 0x350, 0x4d0, 384);
+
+    /// <summary>PoE2 Steam client: server static public sits immediately *before* the SPKI (verified a
+    /// subgroup element); the client static private exponent has not been located yet
+    /// (see PORTING-POE2.md) — the static DH half may have moved or changed.</summary>
+    public static readonly ClientLayout Poe2 = new("PoE2", 0x346, null, -0x180, 384);
+}
+
+/// <summary>
+/// The login key blobs inside the client executable. They sit together in .rdata and are only referenced from
+/// the login connect function. Located by the DER header, not by fixed offsets; the surrounding layout is
+/// per-client (<see cref="ClientLayout"/>).
+/// </summary>
+public sealed class ClientImage
+{
+    public const int DefaultVerifyKeyLength = 0x346;     // X.509 SubjectPublicKeyInfo, DSA p=2048 q=224
 
     // SEQUENCE(0x342) SEQUENCE(0x235) OID 1.2.840.10040.4.1 (dsa)
     private static readonly byte[] DerPrefix = Convert.FromHexString("308203423082023506072a8648ce380401");
 
-    public byte[] Bytes { get; } = bytes;
+    private readonly byte[] _bytes;
+    private readonly ClientLayout _layout;
 
-    public int Offset { get; } = FindUnique(bytes);
+    public ClientImage(byte[] bytes) : this(bytes, Detect(bytes)) { }
+
+    public ClientImage(byte[] bytes, ClientLayout layout)
+    {
+        _bytes = bytes;
+        _layout = layout;
+        Offset = FindUnique(bytes, layout.VerifyKeyLength);
+    }
+
+    public byte[] Bytes => _bytes;
+    public ClientLayout Layout => _layout;
+    public int Offset { get; }
+
+    public int VerifyKeyLength => _layout.VerifyKeyLength;
 
     public DsaKey ReadVerifyKey()
     {
-        var spki = new AsnReader(Bytes.AsMemory(Offset, VerifyKeyLength), AsnEncodingRules.DER).ReadSequence();
+        var spki = new AsnReader(_bytes.AsMemory(Offset, VerifyKeyLength), AsnEncodingRules.DER).ReadSequence();
         var alg = spki.ReadSequence();
         alg.ReadObjectIdentifier();
         var prm = alg.ReadSequence();
@@ -78,18 +111,54 @@ public sealed class ClientImage(byte[] bytes)
     }
 
     public BigInteger ReadClientStaticPrivate() =>
-        Big.FromBigEndian(Bytes.AsSpan(Offset + ClientStaticPrivateOffset, StaticLength));
+        Big.FromBigEndian(StaticBlob(_layout.ClientStaticPrivateOffset, "client static private"));
 
     public BigInteger ReadServerStaticPublic() =>
-        Big.FromBigEndian(Bytes.AsSpan(Offset + ServerStaticPublicOffset, StaticLength));
+        Big.FromBigEndian(StaticBlob(_layout.ServerStaticPublicOffset, "server static public"));
 
     /// <summary>Overwrites the verify key and the server static public value in place (same sizes).</summary>
     public void Patch(LoginServerKeys keys)
     {
         byte[] der = EncodeVerifyKey(keys.Signing);
         if (der.Length != VerifyKeyLength) throw new InvalidOperationException("verify key would change size");
-        der.CopyTo(Bytes, Offset);
-        Big.ToFixed(keys.ServerStaticPublic, StaticLength).CopyTo(Bytes, Offset + ServerStaticPublicOffset);
+        der.CopyTo(_bytes, Offset);
+        if (_layout.ServerStaticPublicOffset is not int sso)
+            throw new NotSupportedException("server static public offset not mapped for this client");
+        Big.ToFixed(keys.ServerStaticPublic, _layout.StaticLength).CopyTo(_bytes, Offset + sso);
+    }
+
+    private byte[] StaticBlob(int? relativeOffset, string what) =>
+        relativeOffset is int off
+            ? _bytes.AsSpan(Offset + off, _layout.StaticLength).ToArray()
+            : throw new NotSupportedException($"{what} location not yet mapped for this client (see PORTING-POE2.md)");
+
+    /// <summary>Loads a client image and auto-detects its key layout.</summary>
+    public static ClientImage Load(byte[] bytes) => new(bytes, Detect(bytes));
+
+    /// <summary>Picks the layout whose key placement checks out against the bytes around the SPKI.</summary>
+    public static ClientLayout Detect(byte[] bytes)
+    {
+        int at = bytes.AsSpan().IndexOf(DerPrefix);
+        if (at < 0) throw new FormatException("login verify key not found in client image");
+        foreach (var layout in new[] { ClientLayout.Poe1_3293b, ClientLayout.Poe2 })
+        {
+            if (layout.ServerStaticPublicOffset is int sso && SubgroupElement(bytes, at + sso, layout.StaticLength) &&
+                (layout.ClientStaticPrivateOffset is not int cso || HasNonZero(bytes, at + cso, layout.StaticLength)))
+                return layout;
+        }
+        throw new FormatException("no known key layout matches the bytes around the SPKI");
+    }
+
+    private static bool HasNonZero(byte[] bytes, int at, int length) =>
+        at >= 0 && at + length <= bytes.Length && bytes.AsSpan(at, length).IndexOfAnyExcept((byte)0) >= 0;
+
+    /// <summary>True when the 384 bytes at the given file offset are an element of the static DH subgroup
+    /// (y^q = 1) — how the server static public is told apart from a private exponent.</summary>
+    private static bool SubgroupElement(byte[] bytes, int at, int staticLength)
+    {
+        if (at < 0 || at + staticLength > bytes.Length) return false;
+        var value = Big.FromBigEndian(bytes.AsSpan(at, staticLength));
+        return value > 1 && LoginGroups.Static.IsValidElement(value);
     }
 
     public static byte[] EncodeVerifyKey(DsaKey key)
@@ -109,12 +178,12 @@ public sealed class ClientImage(byte[] bytes)
         return w.Encode();
     }
 
-    private static int FindUnique(byte[] bytes)
+    private static int FindUnique(byte[] bytes, int verifyKeyLength)
     {
         int at = bytes.AsSpan().IndexOf(DerPrefix);
         if (at < 0) throw new FormatException("login verify key not found in client image");
         if (bytes.AsSpan(at + 1).IndexOf(DerPrefix) >= 0) throw new FormatException("login verify key header is not unique");
-        if (at + ServerStaticPublicOffset + StaticLength > bytes.Length) throw new FormatException("truncated client image");
+        if (at + verifyKeyLength > bytes.Length) throw new FormatException("truncated client image");
         return at;
     }
 }
