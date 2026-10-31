@@ -41,17 +41,21 @@ real client as the renderer — the approach proven by
    `+0x4d0` holds unrelated .rdata pointers (input-device name strings).
    → `ClientStaticPrivateOffset` / `ServerStaticPublicOffset` must be
    re-derived; the DER-prefix locator itself ports as-is.
-5. **The PoE1 DH groups are gone.** Neither the 3072-bit static group
-   (`cd8fd4b7...`) nor the 1024-bit ephemeral group (`c5d1fff6...`) from
-   `LoginGroups.cs` appears in the PoE2 exe. PoE2 ships different DH
-   parameters (or a changed handshake). They must be recovered from the
-   login crypto object (PoE1: the "Rhoa" ctor `0x140e02170`; PoE2 address TBD)
-   by disassembly.
+5. **The DH groups are intact — as CryptoPP hex-string literals.** A raw-byte
+   search misses them; a numeric-literal scan finds four `0x…` string constants
+   clustered in .rdata (`0x350f330`–`0x350f860`): static P `cd8fd4b7…` (768 hex
+   chars), static Q `66c7ea5b…`, ephemeral Q `62e8fffb…`, ephemeral P
+   `c5d1fff6…` — byte-identical to `LoginGroups.cs`. **LoginGroups.cs ports
+   unchanged.** No client-static-private string exists anywhere, so that key is
+   either relocated raw, runtime-generated, or the static DH half changed —
+   resolve in wave 1 via disassembly (PoE1: "Rhoa" ctor `0x140e02170`) and
+   live traffic capture.
 
-**Implication:** the port's hardest open problem is *one* thing — recovering
-PoE2's DH2 static + ephemeral groups (and confirming the Salsa20 key-material
-layout `km = SHA-512(Z_static || Z_ephemeral)` and IV split still hold).
-Everything else in the login stack is expected to port with small edits.
+**Implication:** the login-stack port is now close to mechanical: identical
+crypto family, identical DH groups, DER-prefix locator unchanged. Open items:
+the PoE2 key-blob offsets (wave 1), the client-static-private question, the
+Salsa20 key-material layout (`km = SHA-512(Z_static || Z_ephemeral)`, IV
+split), and the per-version packet/message set.
 
 ## Next waves (in order)
 
