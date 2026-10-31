@@ -1,0 +1,42 @@
+// Ghidra headless post-script: locate the PoE2 login key blobs and the
+// functions that reference them, so ClientImage offsets can be re-derived.
+// Usage: analyzeHeadless <project> <projname> -import PathOfExileSteam.exe
+//        -postScript find_key_xrefs.ghsm <spkiVA_hex> <staticPubVA_hex> -scriptPath <dir>
+//@author hermes
+//@category RE
+
+import ghidra.app.script.GhidraScript;
+import ghidra.program.model.address.Address;
+
+public class find_key_xrefs extends GhidraScript {
+
+    private void dumpRefs(String label, long va) {
+        Address addr = toAddr(va);
+        println("== " + label + " @ 0x" + Long.toHexString(va) + " ==");
+        var refs = currentProgram.getReferenceManager().getReferencesTo(addr);
+        for (var ref : refs) {
+            Address from = ref.getFromAddress();
+            var fn = getFunctionContaining(from);
+            println("  ref from 0x" + from.toString()
+                    + " (" + ref.getReferenceType() + ")"
+                    + (fn != null ? " in " + fn.getName() + " @ 0x" + fn.getEntryPoint().toString() : ""));
+        }
+    }
+
+    @Override
+    public void run() throws Exception {
+        String[] args = getScriptArgs();
+        long spki = Long.parseLong(args[0], 16);
+        long staticPub = Long.parseLong(args[1], 16);
+        dumpRefs("DSA SPKI (verify key)", spki);
+        dumpRefs("server static public", staticPub);
+
+        // Also dump the bytes at each so we can re-derive adjacency offsets.
+        var mem = currentProgram.getMemory();
+        byte[] b = new byte[0x800];
+        mem.getBytes(toAddr(spki - 0x400), b, 0, 0x400);
+        StringBuilder sb = new StringBuilder("bytes before SPKI (1KB): ");
+        for (byte x : b) sb.append(String.format("%02x", x));
+        println(sb.substring(0, Math.min(sb.length(), 200)) + " ...");
+    }
+}
