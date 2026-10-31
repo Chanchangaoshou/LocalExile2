@@ -19,8 +19,8 @@ import time
 
 GAME_EXE = sys.argv[1] if len(sys.argv) > 1 else r"C:\Users\Administrator\poe2-server\client\PathOfExileSteam.exe"
 PORT = int(sys.argv[2]) if len(sys.argv) > 2 else 21262
-GAME_DIR = os.path.dirname(GAME_EXE)
-GW = os.path.join(GAME_DIR, 'gateway_list.txt')
+GAME_DIR_REAL = r"C:\Program Files (x86)\Steam\steamapps\common\Path of Exile 2"  # the install Steam launches
+GW = os.path.join(GAME_DIR_REAL, 'gateway_list.txt')
 GW_BAK = GW + '.bak'
 STUB = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'login_capture_stub.py')
 CAPTURE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'login-capture.txt')
