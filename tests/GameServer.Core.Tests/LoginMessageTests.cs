@@ -50,6 +50,7 @@ public class LoginMessageTests
         (LoginDirection.ClientToServer, new TwoDigests(B(32, 5), B(32, 6))),
         (LoginDirection.ClientToServer, new WStringU8Message(0x0c, "name", 1)),
         (LoginDirection.ClientToServer, new U8U32(0, 0x10000)),
+        (LoginDirection.ClientToServer, new CharacterSelected(7, 1)),
         (LoginDirection.ClientToServer, new CreateCharacter("a", "b", 1, 2, 3, "c", B(32, 0))),
         (LoginDirection.ClientToServer, new CharacterListRequest(0x01020304)),
         (LoginDirection.ClientToServer, new EmptyMessage(0x19)),

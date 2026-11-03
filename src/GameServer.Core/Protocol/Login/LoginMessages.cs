@@ -408,6 +408,20 @@ public sealed record U8U32(byte Realm, uint Value) : ILoginMessage
     internal static U8U32 Read(ushort id, ref LoginReader r) => new(r.U8(), r.U32());
 }
 
+/// <summary>C→S 0x10: the 0.5.5 client sends this right after a character list that contains a character
+/// (live 2026-11-04: ~50 ms after S→C 0x15 with one entry, both at login and after a create; with an empty
+/// list it is not sent) — apparently the character screen reporting its selection. Five payload bytes, all
+/// zero in every sighting; read here as a u32 and a byte (the split is inferred), the values are ignored and
+/// nothing is answered. The PoE1-era codec did not know this id: the stream desynced on it and the create
+/// (0x12) and Play (0x0e) that followed were silently dropped.</summary>
+public sealed record CharacterSelected(uint Value, byte B) : ILoginMessage
+{
+    public const ushort Id = 0x10;
+    public ushort MessageId => Id;
+    public void WriteFields(LoginWriter w) => w.U32(Value).U8(B);
+    internal static CharacterSelected Read(ushort id, ref LoginReader r) => new(r.U32(), r.U8());
+}
+
 /// <summary>C→S 0x12 (vtable 0x1435d8b10, 0x14213cb50/0x14213cc30, sender 0x142140490, called by the create screen's
 /// 0x140cf5ef0): create a character. Name is the name box, League the chosen <see cref="LeagueEntry.Name"/>. The
 /// u32s were 0 and S78 the chosen CharacterStartStates.dat Id ("DexDefault" for a Ranger, live 2026-10-18).
@@ -490,7 +504,7 @@ public static class LoginCodec
     {
         [0x01] = ReadEmpty, [0x02] = ReadKeyExchange, [0x03] = AccountLogin.Read, [0x05] = TokenLogin.Read,
         [0x06] = TicketLogin.Read, [0x07] = TicketLogin.Read, [0x08] = U32Raw64.Read, [0x0a] = TwoDigests.Read,
-        [0x0c] = WStringU8Message.Read, [0x0e] = U8U32.Read, [0x12] = CreateCharacter.Read,
+        [0x0c] = WStringU8Message.Read, [0x0e] = U8U32.Read, [0x10] = CharacterSelected.Read, [0x12] = CreateCharacter.Read,
         [0x18] = CharacterListRequest.Read, [0x19] = ReadEmpty, [0x1c] = TwoU16.Read, [0x21] = ReadEmpty, [0x22] = HexCode.Read,
         [0x23] = ReadEmpty, [0x2a] = WStringU8Message.Read, [0x2b] = WStringU8Message.Read, [0x2c] = EpicLogin.Read,
         [0x39] = ReadEmpty, [0x3a] = U8Message.Read, [0x3d] = TwoWStringsBool.Read,
