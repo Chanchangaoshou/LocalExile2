@@ -178,7 +178,7 @@ public class LoginServerSessionTests
         Assert.Equal(leagueName, Assert.Single(accounts.Characters(account.Id)).League);
 
         var rejected = Assert.IsType<CreateCharacterResult>(Assert.Single(session.Handle(
-            new CreateCharacter("NewLegacyRanger", leagueName, 0, 0, "DexDefault", new byte[32]))));
+            new CreateCharacter("NewLegacyRanger", leagueName, 0, 0, 0, "DexDefault", new byte[32]))));
         Assert.Equal(LoginServerSession.ResultLeagueDoesNotExist, rejected.Result);
         Assert.Single(accounts.Characters(account.Id));
     }
@@ -203,17 +203,17 @@ public class LoginServerSessionTests
         session.Handle(Request("erin", "pw1234"));
 
         // As the 3.29.3b client sent it (live 2026-10-18): the start state names the class.
-        var replies = session.Handle(new CreateCharacter("ErinRanger", "Hardcore Allflame", 0, 0, "DexDefault", new byte[32]));
+        var replies = session.Handle(new CreateCharacter("ErinRanger", "Hardcore Allflame", 0, 0, 0, "DexDefault", new byte[32]));
         // The list goes first: the client looks the new character up in it when 0x13 arrives, then sends Play.
         var e = Assert.Single(Assert.IsType<List15>(replies[0]).Entries);
         Assert.Equal(LoginServerSession.ResultOk, Assert.IsType<CreateCharacterResult>(replies[1]).Result);
         Assert.Equal(("ErinRanger", "Hardcore Allflame", (ushort)CharacterClass.Ranger), (e.Name, e.Text, e.Class));
         Assert.Equal("Hardcore Allflame", Assert.Single(accounts.Characters(acc.Id)).League);
 
-        Result(LoginServerSession.ResultCharacterNameTaken, new CreateCharacter("ErinRanger", "Standard", 0, 0, "Metadata/Characters/Dex/Dex", new byte[32]));
-        Result(LoginServerSession.ResultLeagueDoesNotExist, new CreateCharacter("Other", "Nowhere", 0, 0, "Metadata/Characters/Dex/Dex", new byte[32]));
-        Result(LoginServerSession.ResultCharacterNameTooShort, new CreateCharacter("ab", "Standard", 0, 0, "Metadata/Characters/Dex/Dex", new byte[32]));
-        Result(LoginServerSession.ResultInvalidClass, new CreateCharacter("Other", "Standard", 99, 99, "?", new byte[32]));
+        Result(LoginServerSession.ResultCharacterNameTaken, new CreateCharacter("ErinRanger", "Standard", 0, 0, 0, "Metadata/Characters/Dex/Dex", new byte[32]));
+        Result(LoginServerSession.ResultLeagueDoesNotExist, new CreateCharacter("Other", "Nowhere", 0, 0, 0, "Metadata/Characters/Dex/Dex", new byte[32]));
+        Result(LoginServerSession.ResultCharacterNameTooShort, new CreateCharacter("ab", "Standard", 0, 0, 0, "Metadata/Characters/Dex/Dex", new byte[32]));
+        Result(LoginServerSession.ResultInvalidClass, new CreateCharacter("Other", "Standard", 99, 99, 0, "?", new byte[32]));
 
         // Play then knows the character's league (the Gateway gets it through Auth's resolve).
         session.Handle(new U8U32(0, 0));

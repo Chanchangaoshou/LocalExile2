@@ -409,15 +409,19 @@ public sealed record U8U32(byte Realm, uint Value) : ILoginMessage
 }
 
 /// <summary>C→S 0x12 (vtable 0x1435d8b10, 0x14213cb50/0x14213cc30, sender 0x142140490, called by the create screen's
-/// 0x140cf5ef0): create a character. Name is the name box, League the chosen <see cref="LeagueEntry.Name"/>. The two
-/// u32 were 0 and S78 the chosen CharacterStartStates.dat Id ("DexDefault" for a Ranger, live 2026-10-18).
-/// PasswordDigest is SHA-256 of the UTF-16LE league password (private leagues), or zeros.</summary>
-public sealed record CreateCharacter(string Name, string League, uint U50, uint U54, string S78, byte[] PasswordDigest) : ILoginMessage
+/// 0x140cf5ef0): create a character. Name is the name box, League the chosen <see cref="LeagueEntry.Name"/>. The
+/// u32s were 0 and S78 the chosen CharacterStartStates.dat Id ("DexDefault" for a Ranger, live 2026-10-18).
+/// PasswordDigest is SHA-256 of the UTF-16LE league password (private leagues), or zeros.
+/// Client 0.5.5 carries a THIRD u32 before S78 (live captures 2026-11-04, byte-exact both times: 79 bytes for
+/// jddij/Allflame/"IntFourDefault", 83 for localtest/Standard with the same start state). Without it the old
+/// reader landed on the third u32's zero high half, read S78 as "" — the class fell back to 0 — and left the
+/// string and digest tail unread, desyncing the stream so the client's Play (0x0e) was silently dropped.</summary>
+public sealed record CreateCharacter(string Name, string League, uint U50, uint U54, uint U58, string S78, byte[] PasswordDigest) : ILoginMessage
 {
     public const ushort Id = 0x12;
     public ushort MessageId => Id;
-    public void WriteFields(LoginWriter w) => w.WStr(Name).WStr(League).U32(U50).U32(U54).WStr(S78).Fixed(PasswordDigest, 32);
-    internal static CreateCharacter Read(ushort id, ref LoginReader r) => new(r.WStr(), r.WStr(), r.U32(), r.U32(), r.WStr(), r.Fixed(32));
+    public void WriteFields(LoginWriter w) => w.WStr(Name).WStr(League).U32(U50).U32(U54).U32(U58).WStr(S78).Fixed(PasswordDigest, 32);
+    internal static CreateCharacter Read(ushort id, ref LoginReader r) => new(r.WStr(), r.WStr(), r.U32(), r.U32(), r.U32(), r.WStr(), r.Fixed(32));
 }
 
 /// <summary>C→S 0x1c (sender 0x142140a80): two u16; the second defaults to the client's count at +0xe58.</summary>

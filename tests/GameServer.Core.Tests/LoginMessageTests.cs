@@ -50,7 +50,7 @@ public class LoginMessageTests
         (LoginDirection.ClientToServer, new TwoDigests(B(32, 5), B(32, 6))),
         (LoginDirection.ClientToServer, new WStringU8Message(0x0c, "name", 1)),
         (LoginDirection.ClientToServer, new U8U32(0, 0x10000)),
-        (LoginDirection.ClientToServer, new CreateCharacter("a", "b", 1, 2, "c", B(32, 0))),
+        (LoginDirection.ClientToServer, new CreateCharacter("a", "b", 1, 2, 3, "c", B(32, 0))),
         (LoginDirection.ClientToServer, new CharacterListRequest(0x01020304)),
         (LoginDirection.ClientToServer, new EmptyMessage(0x19)),
         (LoginDirection.ClientToServer, new TwoU16(1, 2)),
@@ -159,6 +159,22 @@ public class LoginMessageTests
         var m = LoginResult.Of(6, B(32, 0xA0), 0x20, 0x00, []);
         Assert.Equal("0004" + "00000006" + "0006" + "0000" + Convert.ToHexString(B(32, 0xA0)) + "2000" + "0000",
             Convert.ToHexString(LoginMessage.Encode(m)));
+    }
+
+    [Fact]
+    public void Create_character_layout_matches_055_live_capture()
+    {
+        // Live 0.5.5 wire, 2026-11-04 06:50: name, league, THREE u32 (the PoE1-era reader had two and
+        // desynced on the third), the start-state wstring, then the 32-byte digest; 79 bytes in all.
+        byte[] wire = Convert.FromHexString("0012" + "0005" + "6A6464696A" + "0008" + "416C6C666C616D65"
+            + "00000000" + "00000000" + "00000000" + "000E" + "496E74466F757244656661756C74"
+            + "0000000000000000000000000000000000000000000000000000000000000000");
+        Assert.True(LoginCodec.TryDecode(LoginDirection.ClientToServer, wire, out var decoded, out int consumed));
+        Assert.Equal(wire.Length, consumed);
+        var m = Assert.IsType<CreateCharacter>(decoded);
+        Assert.Equal("jddij", m.Name);
+        Assert.Equal("Allflame", m.League);
+        Assert.Equal("IntFourDefault", m.S78);
     }
 
     [Fact]
