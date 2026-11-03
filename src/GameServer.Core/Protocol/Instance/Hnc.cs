@@ -13,9 +13,12 @@ namespace GameServer.Core.Protocol.Instance;
 /// </summary>
 public sealed class HncSender
 {
-    /// <summary>VA of the 64-byte mask in the 3.29.3b client, and the SHA-256 of its contents (the mask itself is read
-    /// from the local client, not shipped).</summary>
-    public const long MaskVa = 0x142fe0da0;
+    /// <summary>VAs of the 64-byte mask in the clients this server serves, with the SHA-256 of its contents (the mask
+    /// itself is read from the local client, not shipped). The mask bytes are identical in both clients — the shared
+    /// hash proves it — only the address moved: the 3.29.3b client keeps it at 0x142fe0da0; the PoE2 0.5.5 client at
+    /// 0x142f10980, where its pair builder (0x1421c52f0) XORs the 64 key bytes against the table and then applies
+    /// exactly the six swaps <see cref="DeriveKey"/> performs (disassembly-verified 2026-11-04).</summary>
+    private static readonly long[] MaskVas = [0x142fe0da0, 0x142f10980];
     private const string MaskSha256 = "0e88f29acc9cab88ee400ca78bbfeeeaebc333afb11f1ea9be3fd37aeb7cbc31";
 
     private static byte[]? _mask;
@@ -23,14 +26,22 @@ public sealed class HncSender
     private static byte[] Mask => _mask ?? throw new InvalidOperationException(
         "HNC mask not loaded: call HncSender.LoadMask with the client executable (Client/Game.exe).");
 
-    /// <summary>Reads the mask from the client executable (PE file) and checks it against the known hash.</summary>
+    /// <summary>Reads the mask from the client executable (PE file): each known address is tried in turn and the
+    /// SHA-256 check decides — a wrong address simply reads unrelated bytes and fails the hash.</summary>
     public static void LoadMask(byte[] clientExe)
     {
-        byte[] mask = PeImage.ReadAtVa(clientExe, MaskVa, 64);
-        string hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(mask)).ToLowerInvariant();
-        if (hash != MaskSha256)
-            throw new InvalidDataException("HNC mask not found: the client is not the expected 3.29.3b build.");
-        _mask = mask;
+        foreach (long va in MaskVas)
+        {
+            byte[] mask;
+            try { mask = PeImage.ReadAtVa(clientExe, va, 64); }
+            catch (InvalidDataException) { continue; }
+            if (Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(mask)).ToLowerInvariant() == MaskSha256)
+            {
+                _mask = mask;
+                return;
+            }
+        }
+        throw new InvalidDataException("HNC mask not found: the client is not a supported build.");
     }
 
     /// <summary>Tests only: any 64 bytes (both sides derive with the same mask).</summary>
