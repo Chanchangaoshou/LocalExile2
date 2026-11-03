@@ -16,7 +16,7 @@ public class HardcoreAuthIntegrationTests
         string source, string destination, bool ssf)
     {
         using var fixture = await Fixture.Create(source);
-        var first = Assert.IsType<InstanceInfo>(Assert.Single(fixture.Session.Handle(new U8U32(0, 0))));
+        var first = Assert.IsType<InstanceInfo>(Assert.Single(fixture.Session.Handle(new PlayRequest(0, 0, new byte[8]))));
         var resolved = fixture.Directory.Handle(new() { Op = "resolve", Ticket = first.U32_38 });
         Assert.True(resolved.Ok);
         Assert.Equal((source, true, ssf, false), (resolved.League, resolved.Hardcore, resolved.Ssf, resolved.Ruthless));
@@ -28,7 +28,7 @@ public class HardcoreAuthIntegrationTests
         foreach (string op in new[] { "resolve", "transfer", "list", "set_level" })
             Assert.False(fixture.Directory.Handle(new() { Op = op, Ticket = first.U32_38, Area = 0x235c, Level = 30 }).Ok);
         Assert.True(fixture.Directory.Handle(new() { Op = "leave", Ticket = first.U32_38 }).Ok);
-        var next = Assert.IsType<InstanceInfo>(Assert.Single(fixture.Session.Handle(new U8U32(0, 0))));
+        var next = Assert.IsType<InstanceInfo>(Assert.Single(fixture.Session.Handle(new PlayRequest(0, 0, new byte[8]))));
         Assert.NotEqual(first.U32_38, next.U32_38);
         var entered = fixture.Directory.Handle(new() { Op = "resolve", Ticket = next.U32_38 });
         Assert.True(entered.Ok);

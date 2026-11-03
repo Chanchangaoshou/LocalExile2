@@ -399,13 +399,18 @@ public sealed record TwoDigests(byte[] DigestA, byte[] DigestB) : ILoginMessage
     internal static TwoDigests Read(ushort id, ref LoginReader r) => new(r.Fixed(32), r.Fixed(32));
 }
 
-/// <summary>C→S 0x0e (vtable 0x1435c0898, 0x141f92c90/0x141f92d10, sender 0x1421406f0): realm byte + u32.</summary>
-public sealed record U8U32(byte Realm, uint Value) : ILoginMessage
+/// <summary>C→S 0x0e: Play — enter the game with the selected character; the client shows "Contacting
+/// Server..." until S→C 0x14 arrives. The PoE1-era message (vtable 0x1435c0898, 0x141f92c90/0x141f92d10,
+/// sender 0x1421406f0) was a realm byte and a u32. Client 0.5.5 sends TEN payload bytes (live 2026-11-04
+/// 07:38: 06 01, then eight zeros, with one character on the account): read here as a byte, a second byte —
+/// 1 with a single character, plausibly the 1-based character index (inferred) — and an opaque eight-byte
+/// tail. The five-byte PoE1 reading left the tail unread and desynced the stream right after Play.</summary>
+public sealed record PlayRequest(byte Realm, byte Index, byte[] Tail) : ILoginMessage
 {
     public const ushort Id = 0x0e;
     public ushort MessageId => Id;
-    public void WriteFields(LoginWriter w) => w.U8(Realm).U32(Value);
-    internal static U8U32 Read(ushort id, ref LoginReader r) => new(r.U8(), r.U32());
+    public void WriteFields(LoginWriter w) => w.U8(Realm).U8(Index).Fixed(Tail, 8);
+    internal static PlayRequest Read(ushort id, ref LoginReader r) => new(r.U8(), r.U8(), r.Fixed(8));
 }
 
 /// <summary>C→S 0x10: the 0.5.5 client sends this right after a character list that contains a character
@@ -504,7 +509,7 @@ public static class LoginCodec
     {
         [0x01] = ReadEmpty, [0x02] = ReadKeyExchange, [0x03] = AccountLogin.Read, [0x05] = TokenLogin.Read,
         [0x06] = TicketLogin.Read, [0x07] = TicketLogin.Read, [0x08] = U32Raw64.Read, [0x0a] = TwoDigests.Read,
-        [0x0c] = WStringU8Message.Read, [0x0e] = U8U32.Read, [0x10] = CharacterSelected.Read, [0x12] = CreateCharacter.Read,
+        [0x0c] = WStringU8Message.Read, [0x0e] = PlayRequest.Read, [0x10] = CharacterSelected.Read, [0x12] = CreateCharacter.Read,
         [0x18] = CharacterListRequest.Read, [0x19] = ReadEmpty, [0x1c] = TwoU16.Read, [0x21] = ReadEmpty, [0x22] = HexCode.Read,
         [0x23] = ReadEmpty, [0x2a] = WStringU8Message.Read, [0x2b] = WStringU8Message.Read, [0x2c] = EpicLogin.Read,
         [0x39] = ReadEmpty, [0x3a] = U8Message.Read, [0x3d] = TwoWStringsBool.Read,

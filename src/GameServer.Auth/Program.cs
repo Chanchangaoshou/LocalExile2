@@ -105,18 +105,29 @@ static async Task Serve(LoginServerKeys keys)
     var listener = new TcpListener(bind, port);
     listener.Start();
     var keyring = InstanceKeyring.LoadOrCreate(Environment.GetEnvironmentVariable("Game_INSTANCE_SECRET") ?? Path.Combine("data", "instance-secret.bin"));
+    // Which game's area table to serve: Game_AREAS_JSON points at another WorldAreas.json (the PoE2 port
+    // serves data/tables/WorldAreas.poe2.json, extracted from that client's WorldAreas.datc64), and
+    // Game_START_AREA names its starting area, whose HASH16 then replaces the PoE1 default.
+    string areasJson = Environment.GetEnvironmentVariable("Game_AREAS_JSON") ?? Path.Combine("data", "tables", "WorldAreas.json");
+    if (Environment.GetEnvironmentVariable("Game_START_AREA") is { } startArea)
+    {
+        GameServer.Core.Accounts.AccountService.StartingArea = startArea;
+        if (GameServer.Core.World.WorldAreaTowns.LoadHashes(areasJson).TryGetValue(startArea, out var startHash))
+            GameServer.Core.World.WorldAreaTowns.StartingAreaHash = startHash;
+        Console.WriteLine($"[auth] start area: {startArea} (hash 0x{GameServer.Core.World.WorldAreaTowns.StartingAreaHash:x4}, areas: {areasJson})");
+    }
     // Every town of the game data (one shared instance each, seed 1); only Lioneye's Watch without data/tables.
-    var towns = GameServer.Core.World.WorldAreaTowns.Load(Path.Combine("data", "tables", "WorldAreas.json"));
+    var towns = GameServer.Core.World.WorldAreaTowns.Load(areasJson);
     // A new instance of an area the Gateway generates itself (ServerLevelAreas) gets a random seed; every other area
     // keeps seed 1, the seed its captures were dumped at. Game_RANDOM_SEEDS=0 (or Game_SERVER_LEVELS=0, which turns
     // the Gateway's generation off) pins them all to 1. Hideouts have a fixed layout: always 1.
-    var hideouts = GameServer.Core.World.WorldAreaHideouts.Load(Path.Combine("data", "tables", "WorldAreas.json"));
+    var hideouts = GameServer.Core.World.WorldAreaHideouts.Load(areasJson);
     // Game_SEED=<n> (dev) gives every new non-hideout instance that seed instead, for generation traces of one seed.
     uint? fixedSeed = uint.TryParse(Environment.GetEnvironmentVariable("Game_SEED"), out var s) ? s : null;
-    var hideoutAreas = GameServer.Core.World.WorldAreaHideouts.LoadAreas(Path.Combine("data", "tables", "WorldAreas.json"));
+    var hideoutAreas = GameServer.Core.World.WorldAreaHideouts.LoadAreas(areasJson);
     var randomAreas = Environment.GetEnvironmentVariable("Game_RANDOM_SEEDS") == "0" || Environment.GetEnvironmentVariable("Game_SERVER_LEVELS") == "0"
         ? new HashSet<ushort>()
-        : GameServer.Core.World.ServerLevelAreas.Hashes(Path.Combine("data", "tables", "WorldAreas.json"),
+        : GameServer.Core.World.ServerLevelAreas.Hashes(areasJson,
             GameServer.Core.World.ServerLevelAreas.Load(GameServer.Core.World.ServerLevelAreas.BaselineFile, m => Console.WriteLine($"[auth] {m}")));
     Console.WriteLine($"[auth] random seeds for {randomAreas.Count} server-generated area(s)");
     using var progress = new SaveDatabase(SaveDatabase.DefaultPath);

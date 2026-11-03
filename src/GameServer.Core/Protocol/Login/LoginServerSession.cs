@@ -34,9 +34,9 @@ public sealed class LoginServerSession(AccountService accounts)
         // Sent when the character screen opens (0x140d13060, only in logged-in state 3). Answered with the character
         // list 0x15 (stored at login+0xe68 and shown by the character screen 0x140d12590; live-tested).
         CharacterListRequest => [CharacterList()],
-        // Play on the character screen sends 0x0e (u8 0, u32 0: character index?; captured 2026-10-16). It waits
-        // ("Contacting Server...") for the instance assignment 0x14.
-        U8U32 m => EnterGame(m),
+        // Play on the character screen sends 0x0e. It waits ("Contacting Server...") for the instance
+        // assignment 0x14.
+        PlayRequest m => EnterGame(m),
         CreateCharacter m => Create(m),
         // Delete on the character screen, after its confirmation (0x140cfafa0): the character's name and a byte (0 live).
         WStringU8Message { MessageId: DeleteCharacterId } m => Delete(m.Text),
@@ -60,13 +60,14 @@ public sealed class LoginServerSession(AccountService accounts)
     /// instance 0x0F. The 64 key bytes become the instance connection's Salsa20 key material (Agents/docs/re/010). Data8 goes
     /// into the 0x0E digest and stays zero.
     /// </summary>
-    private ILoginMessage[] EnterGame(U8U32 play)
+    private ILoginMessage[] EnterGame(PlayRequest play)
     {
         if (Session is null) return [];
         var characters = accounts.Characters(Session.AccountId);
         if (characters.Count == 0) return [];
-        // The u32 is probably the character's index on the character screen (0 for the first, the only one tested).
-        var chosen = characters[(int)Math.Min(play.Value, (uint)characters.Count - 1)];
+        // Play's second byte is the character's 1-based index on the character screen (1 with a single
+        // character, live 2026-11-04; inferred). Out-of-range values clamp to the list.
+        var chosen = characters[Math.Clamp(play.Index - 1, 0, characters.Count - 1)];
         if (!HardcoreDeathRules.CanEnter(chosen))
             return [CharacterList(), new U16Message(0x0f, ResultLeagueDoesNotExist)];
         // Last played now: the character screen selects it next time (CharacterList's B28).

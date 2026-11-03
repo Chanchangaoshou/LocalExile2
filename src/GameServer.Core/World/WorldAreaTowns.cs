@@ -14,8 +14,10 @@ public static class WorldAreaTowns
     // pvpTown is IsTown too, but PvP is not implemented: entering it would give a town nobody can use.
     static readonly HashSet<string> Excluded = ["pvpTown"];
 
-    /// <summary>HASH16 of <see cref="Accounts.AccountService.StartingArea"/>, The Twilight Strand (1_1_1).</summary>
-    public const ushort StartingAreaHash = 0xf00a;
+    /// <summary>HASH16 of <see cref="Accounts.AccountService.StartingArea"/> — The Twilight Strand (1_1_1) in
+    /// the PoE1 data. GameServer.Auth overrides it from the loaded area table when it serves another game's
+    /// data (PoE2: G1_1, The Riverbank, 0x0f14 in the 0.5.5 client's WorldAreas).</summary>
+    public static ushort StartingAreaHash { get; set; } = 0xf00a;
 
     /// <summary>
     /// Where a login puts a character (WorldAreas HASH16): its last town, else the starting area, The Twilight Strand,
@@ -25,6 +27,16 @@ public static class WorldAreaTowns
     /// </summary>
     public static ushort LoginArea(string? lastTown, IReadOnlyList<(string Id, ushort Hash16)> towns) =>
         lastTown is not null && towns.FirstOrDefault(t => t.Id == lastTown) is { Id: not null } town ? town.Hash16 : StartingAreaHash;
+
+    /// <summary>Every row's Id → HASH16 (not just towns), for resolving configured area ids.</summary>
+    public static IReadOnlyDictionary<string, ushort> LoadHashes(string worldAreasJson)
+    {
+        if (!File.Exists(worldAreasJson)) return new Dictionary<string, ushort>();
+        using var doc = JsonDocument.Parse(File.ReadAllBytes(worldAreasJson));
+        return doc.RootElement.EnumerateArray()
+            .Where(r => r.GetProperty("Id").GetString() is not null)
+            .ToDictionary(r => r.GetProperty("Id").GetString()!, r => (ushort)r.GetProperty("HASH16").GetInt32());
+    }
 
     /// <summary>The town rows of a WorldAreas.json, in table order; <see cref="Default"/> when the file is missing.</summary>
     public static IReadOnlyList<(string Id, ushort Hash16)> Load(string worldAreasJson)

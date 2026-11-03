@@ -88,7 +88,7 @@ public class InstanceProtocolTests
         var session = new LoginServerSession(accounts) { Keyring = keyring };
         session.Handle(new AccountLogin(2, "dave", new byte[32], AccountService.ClientPasswordDigest("pw1234"), new byte[32], false, false, 0x40, 0));
 
-        var info = Assert.IsType<InstanceInfo>(Assert.Single(session.Handle(new U8U32(0, 0))));
+        var info = Assert.IsType<InstanceInfo>(Assert.Single(session.Handle(new PlayRequest(0, 0, new byte[8]))));
         Assert.NotEqual(0u, info.U32_38);
         Assert.Equal(keyring.Key(info.U32_38), info.Key64);
     }

@@ -131,7 +131,7 @@ public class LoginServerSessionTests
         var e = Assert.Single(list.Entries);
         Assert.Equal(("CarolWitch", "Standard", (ushort)1, (ushort)CharacterClass.Witch), (e.Name, e.Text, e.Level, e.Class));
 
-        var info = Assert.IsType<InstanceInfo>(Assert.Single(session.Handle(new U8U32(0, 0))));
+        var info = Assert.IsType<InstanceInfo>(Assert.Single(session.Handle(new PlayRequest(0, 0, new byte[8]))));
         Assert.Equal(("127.0.0.1", (ushort)6112, (ushort)0x235c), (info.Host, info.U16_30, info.AreaHash));
 
         // Every reply survives the S→C codec.
@@ -171,7 +171,7 @@ public class LoginServerSessionTests
         Assert.DoesNotContain(offered.Leagues, l => l.Name == leagueName);
         Assert.Null(session.Leagues.Find(leagueName));
 
-        session.Handle(new U8U32(0, 0));
+        session.Handle(new PlayRequest(0, 0, new byte[8]));
         var resolved = Assert.IsType<League>(session.CharacterLeague);
         Assert.Equal((leagueName, hardcore, ssf, ruthless),
             (resolved.Name, resolved.Hardcore, resolved.Ssf, resolved.Ruthless));
@@ -216,7 +216,7 @@ public class LoginServerSessionTests
         Result(LoginServerSession.ResultInvalidClass, new CreateCharacter("Other", "Standard", 99, 99, 0, "?", new byte[32]));
 
         // Play then knows the character's league (the Gateway gets it through Auth's resolve).
-        session.Handle(new U8U32(0, 0));
+        session.Handle(new PlayRequest(0, 0, new byte[8]));
         Assert.True(session.CharacterLeague!.Hardcore);
         Assert.Equal(CharacterClass.Ranger, session.CharacterClass);
 
@@ -250,6 +250,6 @@ public class LoginServerSessionTests
     {
         var session = new LoginServerSession(new AccountService(new JsonAccountStore()));
         Assert.Empty(session.Handle(new CharacterListRequest(0)).OfType<List15>().SelectMany(l => l.Entries));
-        Assert.Empty(session.Handle(new U8U32(0, 0)));
+        Assert.Empty(session.Handle(new PlayRequest(0, 0, new byte[8])));
     }
 }

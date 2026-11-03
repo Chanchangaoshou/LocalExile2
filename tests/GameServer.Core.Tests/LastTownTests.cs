@@ -38,7 +38,7 @@ public class LastTownTests
         session.Handle(new GameServer.Core.Protocol.Login.AccountLogin(2, "hana", new byte[32],
             AccountService.ClientPasswordDigest("pw1234"), new byte[32], false, false, 0x40, 0));
 
-        session.Handle(new GameServer.Core.Protocol.Login.U8U32(0, 0));   // Play
+        session.Handle(new GameServer.Core.Protocol.Login.PlayRequest(0, 0, new byte[8]));   // Play
 
         Assert.Equal("1_3_town", session.CharacterLastTown);
     }

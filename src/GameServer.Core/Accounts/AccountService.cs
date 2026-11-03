@@ -20,7 +20,9 @@ public sealed class AccountService(IAccountStore store, TimeProvider? clock = nu
     private readonly object _gate = new();
 
     // The Twilight Strand: new characters wash up there and reach Lioneye's Watch once Hillock is dead (a1q1).
-    public static string StartingArea => "1_1_1";
+    /// <summary>Where a new character starts (a WorldAreas Id). GameServer.Auth overrides it when it serves
+    /// another game's data (PoE2: "G1_1", The Riverbank).</summary>
+    public static string StartingArea { get; set; } = "1_1_1";
 
     /// <summary>How many characters an account may have.</summary>
     public int MaxCharacters => maxCharacters;
