@@ -13,15 +13,15 @@ public class LoginMessageTests
     [
         (LoginDirection.ServerToClient, new EmptyMessage(0x01)),
         (LoginDirection.ServerToClient, new KeyExchange(B(128, 1), B(56, 9))),
-        (LoginDirection.ServerToClient, new LoginResult(0, "account", B(32, 3), 0x21, 0x01, B(5, 7))),
+        (LoginDirection.ServerToClient, new LoginResult(0x01020304, 0x0506, "account", B(32, 3), 0x21, 0x01, B(5, 7))),
         (LoginDirection.ServerToClient, new U16Message(0x0b, 0x1234)),
         (LoginDirection.ServerToClient, new U16Message(0x0d, 1)),
         (LoginDirection.ServerToClient, new U16Message(0x0f, 2)),
         (LoginDirection.ServerToClient, new Blob11(3, B(40, 0))),
-        (LoginDirection.ServerToClient, new CreateCharacterResult(0xbeef, true)),
+        (LoginDirection.ServerToClient, new CreateCharacterResult(0xbeef, true, 0x01020304)),
         (LoginDirection.ServerToClient, new InstanceInfo("127.0.0.1", 6112, 0xdeadbeef, 0x4321, 7, B(64, 0x40), B(8, 0x80), 1)),
-        (LoginDirection.ServerToClient, new List15([new("Standard", "desc", 1, 2, 3, 0x01020304, 5, 0x0607, 0x0809, 10, 11),
-            new("Hardcore", "", 0, 0, 0, 0, 0, 0, 0, 0, 0)], 4, 5, B(3, 0))),
+        (LoginDirection.ServerToClient, new List15(0x01020304, [new("Standard", "desc", 1, 2, 3, 0x01020304, 5, 0x0607, 0x0809, 10, 11, 12, 13),
+            new("Hardcore", "", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)], 4, 5, 0x1415, 0x1617, "text", [new(0x1819, -3), new(0x1a1b, 70000)], 0x1c1d1e1f, 0x20212223)),
         (LoginDirection.ServerToClient, new U16Message(0x17, 9)),
         (LoginDirection.ServerToClient, new LeaguesWithProgress(3, [Character])),
         (LoginDirection.ServerToClient, new LeagueList(1_760_000_000, [Character, Character with { Name = "Two" }], true, false)),
@@ -51,7 +51,7 @@ public class LoginMessageTests
         (LoginDirection.ClientToServer, new WStringU8Message(0x0c, "name", 1)),
         (LoginDirection.ClientToServer, new U8U32(0, 0x10000)),
         (LoginDirection.ClientToServer, new CreateCharacter("a", "b", 1, 2, "c", B(32, 0))),
-        (LoginDirection.ClientToServer, new EmptyMessage(0x18)),
+        (LoginDirection.ClientToServer, new CharacterListRequest(0x01020304)),
         (LoginDirection.ClientToServer, new EmptyMessage(0x19)),
         (LoginDirection.ClientToServer, new TwoU16(1, 2)),
         (LoginDirection.ClientToServer, new EmptyMessage(0x21)),
@@ -152,6 +152,26 @@ public class LoginMessageTests
     }
 
     [Fact]
+    public void Login_result_layout_matches_055_client()
+    {
+        // 0.5.5 client 0x04 read 0x14214dbe0: big-endian u32 + u16, wide string, 32-byte digest, two raw
+        // flag bytes, blob. (The PoE1-era lone-u16-first layout makes its wstring reader land in the digest.)
+        var m = LoginResult.Of(6, B(32, 0xA0), 0x20, 0x00, []);
+        Assert.Equal("0004" + "00000006" + "0006" + "0000" + Convert.ToHexString(B(32, 0xA0)) + "2000" + "0000",
+            Convert.ToHexString(LoginMessage.Encode(m)));
+    }
+
+    [Fact]
+    public void Character_list_layout_matches_055_client()
+    {
+        // 0.5.5 client 0x15 read 0x14214e210: u32, u8 count + entries, two bytes, two big-endian u16,
+        // a narrow string, a varint-count pair vector (u16 + signed varint), two u32.
+        var m = new List15(0x01020304, [], 5, 24, 0x0607, 0x0809, "ab", [new ListPair15(0x0a0b, -3)], 0x0c0d0e0f, 0x10111213);
+        Assert.Equal("0015" + "01020304" + "00" + "05" + "18" + "0607" + "0809" + "0002" + "6162"
+            + "01" + "0A0B" + "7D" + "0C0D0E0F" + "10111213", Convert.ToHexString(LoginMessage.Encode(m)));
+    }
+
+    [Fact]
     public void Character_list_time_and_raw_fields_are_little_endian()
     {
         var m = new LeagueList(0x0102030405060708, [], false, true);
@@ -165,7 +185,7 @@ public class LoginMessageStreamTests
     [
         new AccountLogin(2, "user", new byte[32], new byte[32], new byte[32], true, true, 0x40, 0),
         new WStringMessage(0x3f, "hé😀"),
-        new EmptyMessage(0x18),
+        new CharacterListRequest(3),
         new TwoU16(1, 2),
     ];
 
@@ -185,12 +205,12 @@ public class LoginMessageStreamTests
     public void Unknown_id_desyncs_and_keeps_the_rest()
     {
         var s = new LoginMessageStream(LoginDirection.ClientToServer);
-        var got = s.Push([.. LoginMessage.Encode(new EmptyMessage(0x18)), 0x00, 0x04, 0xaa]);
+        var got = s.Push([.. LoginMessage.Encode(new EmptyMessage(0x19)), 0x00, 0x04, 0xaa]);
         Assert.Single(got);
         Assert.True(s.Desynced);
         Assert.Contains("0x0004", s.Error);
         Assert.Equal([0x00, 0x04, 0xaa], s.Undecoded);
-        Assert.Empty(s.Push([0x00, 0x18]));
+        Assert.Empty(s.Push([0x00, 0x19]));
         Assert.Equal(5, s.Undecoded.Count);
     }
 

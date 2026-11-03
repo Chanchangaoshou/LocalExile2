@@ -22,7 +22,7 @@ public sealed record League(string Name, string Base, bool Hardcore, bool Ssf, b
     public LeagueEntry Entry() => new(Name, Description, SsfParent, HardcoreParent, RuthlessParent, 0, 0, 0,
         (byte)((IsMain ? LeagueEntry.Main : 0) | (Hardcore ? LeagueEntry.Hardcore : 0)),
         (byte)((IsMain ? 0 : LeagueEntry.Variant) | (Ruthless ? LeagueEntry.Ruthless : 0)),
-        0, 0, 0, 0xd1);
+        0, 0, 0, 0);
 }
 
 /// <summary>

@@ -33,7 +33,7 @@ public sealed class LoginServerSession(AccountService accounts)
         AccountLogin m => Login(m),
         // Sent when the character screen opens (0x140d13060, only in logged-in state 3). Answered with the character
         // list 0x15 (stored at login+0xe68 and shown by the character screen 0x140d12590; live-tested).
-        EmptyMessage { MessageId: 0x18 } => [CharacterList()],
+        CharacterListRequest => [CharacterList()],
         // Play on the character screen sends 0x0e (u8 0, u32 0: character index?; captured 2026-10-16). It waits
         // ("Contacting Server...") for the instance assignment 0x14.
         U8U32 m => EnterGame(m),
@@ -123,7 +123,7 @@ public sealed class LoginServerSession(AccountService accounts)
         {
             Failed = true;
             ushort code = r.Error == AuthError.NotFound ? ResultAccountDoesNotExist : ResultInvalidPassword;
-            return [new LoginResult(code, "", new byte[32], 0, 0, [])];
+            return [LoginResult.Of(code, new byte[32], 0, 0, [])];
         }
         Session = r.Value;
         Account = accounts.GetAccount(Session!.AccountId);
@@ -135,15 +135,17 @@ public sealed class LoginServerSession(AccountService accounts)
         // Flags0 bit 5 → login+0xea8: the account's email is verified. With it clear the character screen builds the
         // "Your account is not verified" panel (0x140d195d0) and chat/trade features are locked.
         byte[] remembered = m.Flag94 ? accounts.SavedClientCredential(Session.AccountId, m.MachineIdA, m.MachineIdB) : new byte[32];
-        return [new LoginResult(ResultOk, "", remembered, FlagVerified, 0, []),
+        return [LoginResult.Of(ResultOk, remembered, FlagVerified, 0, []),
                 new LeagueList(DateTimeOffset.UtcNow.ToUnixTimeSeconds(), Leagues.Entries(), false, false)];
     }
 
     /// <summary>0x15: the characters, then B28 (→ character screen +0x280: the index of the character it selects, the
     /// last played one here; verified live 2026-10-22) and B29, the character slots (login+0xe81 → character screen
     /// +0x281): its Create Character button is enabled only while the account has fewer characters than that
-    /// (0x140d17cc0; 0 kept it greyed out, live 2026-10-18).</summary>
-    private List15 CharacterList() => new(CharacterEntries(), LastPlayedIndex(), (byte)Math.Clamp(accounts.MaxCharacters, 0, 255), []);
+    /// (0x140d17cc0; 0 kept it greyed out, live 2026-10-18). B28/B29 sit in the same wire slots in the 0.5.5
+    /// layout; the new 0.5.5 head/tail fields are still unmapped and go out 0/empty.</summary>
+    private List15 CharacterList() => new(0, CharacterEntries(), LastPlayedIndex(),
+        (byte)Math.Clamp(accounts.MaxCharacters, 0, 255), 0, 0, "", [], 0, 0);
 
     /// <summary>The list index of the account's most recently played character (Play updates LastPlayedUtc), 0 for none.</summary>
     private byte LastPlayedIndex()
@@ -191,11 +193,11 @@ public sealed class LoginServerSession(AccountService accounts)
     {
         if (Session is null) return [];
         var league = Leagues.Find(m.League);
-        if (league is null) return [new CreateCharacterResult(ResultLeagueDoesNotExist, false)];
-        if (ClassOf(m) is not { } cls) return [new CreateCharacterResult(ResultInvalidClass, false)];
+        if (league is null) return [new CreateCharacterResult(ResultLeagueDoesNotExist, false, 0)];
+        if (ClassOf(m) is not { } cls) return [new CreateCharacterResult(ResultInvalidClass, false, 0)];
         string name = m.Name.Trim();
-        if (name.Length < 3) return [new CreateCharacterResult(ResultCharacterNameTooShort, false)];
-        if (name.Length > 23) return [new CreateCharacterResult(ResultCharacterNameTooLong, false)];
+        if (name.Length < 3) return [new CreateCharacterResult(ResultCharacterNameTooShort, false, 0)];
+        if (name.Length > 23) return [new CreateCharacterResult(ResultCharacterNameTooLong, false, 0)];
         var r = accounts.CreateCharacter(Session.AccountId, name, cls, league.Name);
         if (!r.Ok)
             return [new CreateCharacterResult(r.Error switch
@@ -204,11 +206,11 @@ public sealed class LoginServerSession(AccountService accounts)
                 AuthError.LimitReached => ResultTooManyCharacters,
                 AuthError.InvalidClass => ResultInvalidClass,
                 _ => ResultCharacterNameInvalid,
-            }, false)];
+            }, false, 0)];
         // The list first: on 0 the create screen (0x140cf8010) looks the new character up by name in the character list
         // and sends Play (0x0e) with its index; with the list sent after 0x13 it was not there yet and the client waited
         // on "Contacting Server..." (live 2026-10-18).
-        return [CharacterList(), new CreateCharacterResult(ResultOk, false)];
+        return [CharacterList(), new CreateCharacterResult(ResultOk, false, 0)];
     }
 
     /// <summary>Characters.dat Id → class (CharacterClass is Characters.dat IntegerId).</summary>
@@ -243,12 +245,14 @@ public sealed class LoginServerSession(AccountService accounts)
     /// <summary>
     /// The account's characters as 0x15 entries. Mapped live (2026-10-16) with one probe character per field set to 3:
     /// +0x48 is the level ("Level 3"), +0x4a the class (3 showed "Witch"; our enum has the same order with Scion = 0),
-    /// +0x44 / +0x46 change the portrait, +0x49 adds a red marker. The others showed no visible change.
+    /// +0x44 / +0x46 change the portrait, +0x49 adds a red marker. The others showed no visible change. In the 0.5.5
+    /// layout level and class are u16 at the same offsets; the +0x49 marker's new home is unknown, so the dead
+    /// marker is NOT sent yet (a dead hardcore character would list as alive — revisit before delete/resurrect work).
     /// </summary>
     private ListEntry15[] CharacterEntries() =>
         Session is null ? [] :
         [.. accounts.Characters(Session.AccountId).Select(c =>
             // U46 (+0x46) is the portrait variation the character screen draws (0x14082e210 → 0x142426b00).
-            new ListEntry15(c.Name, c.League, (byte)(c.HardcoreDeath?.PermanentlyDead == true ? 1 : 0), 0,
-                (byte)Math.Clamp(c.Level, 0, 255), 0, (byte)c.Class, 0, c.Portrait, 0, 0))];
+            new ListEntry15(c.Name, c.League, 0, 0, 0, 0, 0, 0, c.Portrait,
+                (ushort)Math.Clamp(c.Level, 0, 65535), (ushort)c.Class, 0, 0))];
 }

@@ -27,6 +27,32 @@ public sealed class LoginWriter
 
     public LoginWriter Bytes(ReadOnlySpan<byte> v) { foreach (byte x in v) _b.Add(x); return this; }
 
+    /// <summary>
+    /// The client's compressed unsigned int (reader 0x1408719a0, writer pair near 0x1423bac30): the first byte's
+    /// leading bits give the length — below 0x80 the value itself (7 bits), 0x80: (b &amp; 0x3f) ++ 1 byte (14 bits),
+    /// 0xC0: (b &amp; 0x1f) ++ 2 bytes (21 bits), 0xE0: (b &amp; 0x1f) ++ 3 bytes (29 bits), 0xF0: the full byte
+    /// ++ 4 bytes. Used by the 0x15 pair vector's count. Canonical (shortest) form is written.
+    /// </summary>
+    public LoginWriter VarintU(uint v)
+    {
+        if (v < 0x80) return U8((byte)v);
+        if (v < 0x4000) return U8((byte)(0x80 | (v >> 8))).U8((byte)v);
+        if (v < 0x200000) return U8((byte)(0xC0 | (v >> 16))).U8((byte)(v >> 8)).U8((byte)v);
+        if (v < 0x20000000) return U8((byte)(0xE0 | (v >> 24))).U8((byte)(v >> 16)).U8((byte)(v >> 8)).U8((byte)v);
+        throw new ArgumentOutOfRangeException(nameof(v), "varint too large for the forms in use");
+    }
+
+    /// <summary>The signed twin (reader 0x141cfc160): same length tags, the value's sign in the bit below the
+    /// tag bits (0x40 / 0x20 / 0x10), sign-extended on read. Used by the 0x15 pair vector's values.</summary>
+    public LoginWriter VarintS(int v)
+    {
+        if (v is >= -64 and < 64) return U8((byte)(v & 0x7f));
+        if (v is >= -8192 and < 8192) { int u = v & 0x3fff; return U8((byte)(0x80 | (u >> 8))).U8((byte)u); }
+        if (v is >= -1048576 and < 1048576) { int u = v & 0x1fffff; return U8((byte)(0xC0 | (u >> 16))).U8((byte)(u >> 8)).U8((byte)u); }
+        int w = v & 0x1fffffff;
+        return U8((byte)(0xE0 | (w >> 24))).U8((byte)(w >> 16)).U8((byte)(w >> 8)).U8((byte)w);
+    }
+
     /// <summary>A fixed-size field (digests, ids): exactly <paramref name="size"/> bytes.</summary>
     public LoginWriter Fixed(byte[] v, int size)
     {
@@ -92,6 +118,31 @@ public ref struct LoginReader(ReadOnlySpan<byte> buf)
     public uint RawU32() { var s = Take(4); return Short ? 0 : BinaryPrimitives.ReadUInt32LittleEndian(s); }
     public ulong RawU64() { var s = Take(8); return Short ? 0 : BinaryPrimitives.ReadUInt64LittleEndian(s); }
     public byte[] Fixed(int n) { var s = Take(n); return Short ? new byte[n] : s.ToArray(); }
+
+    /// <summary>Inverse of <see cref="LoginWriter.VarintU"/> (client reader 0x1408719a0).</summary>
+    public uint VarintU()
+    {
+        uint b = U8();
+        if (Short) return 0;
+        if (b < 0x80) return b;
+        if ((b & 0xC0) == 0x80) { uint v = (b & 0x3F) << 8 | U8(); return Short ? 0 : v; }
+        if ((b & 0xE0) == 0xC0) { uint v = (b & 0x1F) << 16 | (uint)U8() << 8 | U8(); return Short ? 0 : v; }
+        if ((b & 0xF0) == 0xE0) { uint v = (b & 0x1F) << 24 | (uint)U8() << 16 | (uint)U8() << 8 | U8(); return Short ? 0 : v; }
+        uint w = b << 24 | (uint)U8() << 16 | (uint)U8() << 8 | U8();
+        return Short ? 0 : w;
+    }
+
+    /// <summary>Inverse of <see cref="LoginWriter.VarintS"/> (client reader 0x141cfc160).</summary>
+    public int VarintS()
+    {
+        uint b = U8();
+        if (Short) return 0;
+        if (b < 0x80) return (b & 0x40) != 0 ? (int)(b | 0xFFFFFF80) : (int)b;
+        if ((b & 0xC0) == 0x80) { uint v = (b & 0x3F) << 8 | U8(); return Short ? 0 : (b & 0x20) != 0 ? (int)(v | 0xFFFFC000) : (int)v; }
+        if ((b & 0xE0) == 0xC0) { uint v = (b & 0x1F) << 16 | (uint)U8() << 8 | U8(); return Short ? 0 : (b & 0x10) != 0 ? (int)(v | 0xFFE00000) : (int)v; }
+        if ((b & 0xF0) == 0xE0) { uint v = (b & 0x1F) << 24 | (uint)U8() << 16 | (uint)U8() << 8 | U8(); return Short ? 0 : (b & 0x08) != 0 ? (int)(v | 0xE0000000) : (int)v; }
+        throw new InvalidDataException("bad signed varint tag");
+    }
     public byte[] Blob() { int n = U16(); return Short ? [] : Fixed(n); }
     public string Str() => Encoding.UTF8.GetString(Blob());
 

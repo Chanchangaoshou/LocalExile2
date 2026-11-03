@@ -23,7 +23,7 @@ public static class LoginMessage
     }
 }
 
-/// <summary>Messages with no fields: S→C 0x01; C→S 0x01, 0x18, 0x19, 0x21, 0x23, 0x39.</summary>
+/// <summary>Messages with no fields: S→C 0x01; C→S 0x01, 0x19, 0x21, 0x23, 0x39.</summary>
 public sealed record EmptyMessage(ushort MessageId) : ILoginMessage
 {
     public void WriteFields(LoginWriter w) { }
@@ -66,13 +66,28 @@ public sealed record WStringU8Message(ushort MessageId, string Text, byte Value)
 
 // ---------------------------------------------------------------- server → client
 
-/// <summary>S→C 0x04 (vtable 0x1435dbac8, write 0x14219b140, read 0x14219b230). Result 0 moves the client to state 3 (logged in).</summary>
-public sealed record LoginResult(ushort Result, string AccountName, byte[] Digest, byte Flags0, byte Flags1, byte[] Data) : ILoginMessage
+/// <summary>
+/// S→C 0x04, client 0.5.5 (factory 0x14214fbe0: vtable 0x143509ed8, object 0x90 bytes; write 0x14214dad0,
+/// read 0x14214dbe0; disassembly-verified 2026-11-04): a big-endian u32 (+0x10), a big-endian u16 (+0x14),
+/// the account wide string (string object at +0x48), the 32-byte saved-credential digest (+0x16), a RAW
+/// (never byte-swapped) u16 at +0x88 — the two flag bytes, in order — and a u16-length blob (vector at +0x68).
+/// This differs from the PoE1-era layout (a lone u16 result first): with the old layout the 0.5.5 client's
+/// wide-string reader starts four bytes early, lands inside the digest and throws "Protocol violation reading
+/// wstring from the network" before the league list is even reached (live 2026-11-04 06:01, after the login
+/// itself had already succeeded). Which of the two leading integers the client gates on is not yet pinned
+/// down — the result code is written to BOTH (on success both are 0 anyway).
+/// </summary>
+public sealed record LoginResult(uint Result32, ushort Result, string AccountName, byte[] Digest, byte Flags0, byte Flags1, byte[] Data) : ILoginMessage
 {
     public const ushort Id = 0x04;
     public ushort MessageId => Id;
-    public void WriteFields(LoginWriter w) => w.U16(Result).WStr(AccountName).Fixed(Digest, 32).U8(Flags0).U8(Flags1).Blob(Data);
-    internal static LoginResult Read(ushort id, ref LoginReader r) => new(r.U16(), r.WStr(), r.Fixed(32), r.U8(), r.U8(), r.Blob());
+
+    /// <summary>Builds a result with the code in both leading fields (see the layout note).</summary>
+    public static LoginResult Of(ushort result, byte[] digest, byte flags0, byte flags1, byte[] data) =>
+        new(result, result, "", digest, flags0, flags1, data);
+
+    public void WriteFields(LoginWriter w) => w.U32(Result32).U16(Result).WStr(AccountName).Fixed(Digest, 32).U8(Flags0).U8(Flags1).Blob(Data);
+    internal static LoginResult Read(ushort id, ref LoginReader r) => new(r.U32(), r.U16(), r.WStr(), r.Fixed(32), r.U8(), r.U8(), r.Blob());
 }
 
 /// <summary>S→C 0x11 (vtable 0x1435dba88, 0x14219b5a0/0x14219b610): u8 + u16-length blob, parsed by the client into 17 records of 0x80 bytes (0x14213d060).</summary>
@@ -84,15 +99,17 @@ public sealed record Blob11(byte Kind, byte[] Data) : ILoginMessage
     internal static Blob11 Read(ushort id, ref LoginReader r) => new(r.U8(), r.Blob());
 }
 
-/// <summary>S→C 0x13 (vtable 0x1435dbae8, 0x14219b850/0x14219b8d0): the answer to C→S 0x12 (create character). The
-/// create screen's listener (0x140cf8010 at +0xa10) treats 0 as done ("character_creation_done") and goes back to the
-/// character list. When the flag is set the client posts to /api/tracking-conversions/.</summary>
-public sealed record CreateCharacterResult(ushort Result, bool Tracking) : ILoginMessage
+/// <summary>S→C 0x13: the answer to C→S 0x12 (create character). The create screen's listener treats 0 as done
+/// ("character_creation_done") and goes back to the character list. When the flag is set the client posts to
+/// /api/tracking-conversions/. Client 0.5.5 (vtable 0x143509e98, write 0x14214eb50, read 0x14214ebf0;
+/// disassembly-verified 2026-11-04): result u16 (+0x16), the flag byte (+0x14), then a big-endian u32 (+0x10)
+/// the PoE1-era layout did not have — its meaning is unknown, sent 0.</summary>
+public sealed record CreateCharacterResult(ushort Result, bool Tracking, uint U32) : ILoginMessage
 {
     public const ushort Id = 0x13;
     public ushort MessageId => Id;
-    public void WriteFields(LoginWriter w) => w.U16(Result).Bool(Tracking);
-    internal static CreateCharacterResult Read(ushort id, ref LoginReader r) => new(r.U16(), r.Bool());
+    public void WriteFields(LoginWriter w) => w.U16(Result).Bool(Tracking).U32(U32);
+    internal static CreateCharacterResult Read(ushort id, ref LoginReader r) => new(r.U16(), r.Bool(), r.U32());
 }
 
 /// <summary>
@@ -109,31 +126,66 @@ public sealed record InstanceInfo(string Host, ushort U16_30, uint U32_34, ushor
         new(r.Str(), r.U16(), r.U32(), r.U16(), r.U32(), r.Fixed(64), r.Fixed(8), r.U8());
 }
 
-/// <summary>Element of S→C 0x15 (0x50-byte struct, 0x142507200/0x142507480). Wire order differs from struct order.</summary>
-public sealed record ListEntry15(string Name, string Text, byte B49, byte B4d, byte B48, uint U40, byte B4a, ushort U44, ushort U46, byte B4b, byte B4c)
+/// <summary>
+/// Element of S→C 0x15, client 0.5.5 (0x58-byte struct; list reader 0x142716700, entry writer 0x142716570;
+/// disassembly-verified 2026-11-04). Wire order differs from struct order; names give the struct offset. The
+/// PoE1 era had the level at +0x48 and the class at +0x4a as BYTES with a dead-marker byte at +0x49; in 0.5.5
+/// both widened to u16 at the same offsets, so the old B49/B4b bytes have no home — the dead marker must live
+/// in one of the new bytes (+0x4e/+0x4f/+0x50/+0x51), still unknown; they are sent 0.
+/// </summary>
+public sealed record ListEntry15(string Name, string Text, byte B4d, byte B51, byte B4c, uint U40, byte B4e,
+    ushort U44, ushort U46, ushort Level, ushort Class, byte B4f, byte B50)
 {
-    internal void Write(LoginWriter w) => w.WStr(Name).WStr(Text).U8(B49).U8(B4d).U8(B48).U32(U40).U8(B4a).U16(U44).U16(U46).U8(B4b).U8(B4c);
+    internal void Write(LoginWriter w) => w.WStr(Name).WStr(Text)
+        .U8(B4d).U8(B51).U8(B4c).U32(U40).U8(B4e).U16(U44).U16(U46).U16(Level).U16(Class).U8(B4f).U8(B50);
     internal static ListEntry15 Read(ref LoginReader r) =>
-        new(r.WStr(), r.WStr(), r.U8(), r.U8(), r.U8(), r.U32(), r.U8(), r.U16(), r.U16(), r.U8(), r.U8());
+        new(r.WStr(), r.WStr(), r.U8(), r.U8(), r.U8(), r.U32(), r.U8(), r.U16(), r.U16(), r.U16(), r.U16(), r.U8(), r.U8());
 }
 
-/// <summary>S→C 0x15 (vtable 0x1435dba48, 0x14219b3f0/0x14219b490): u8 count + entries, two bytes, then a blob parsed like 0x11.</summary>
-public sealed record List15(IReadOnlyList<ListEntry15> Entries, byte B28, byte B29, byte[] Data) : ILoginMessage
+/// <summary>One element of 0x15's trailing pair vector: a u16 (big-endian) and a signed compressed int
+/// (client 0x141cfc160). The vector itself is a compressed-unsigned-int count (client 0x1408719a0) followed
+/// by the elements; the vector reader is 0x1423bacb0, its writer 0x1423bac30.</summary>
+public sealed record ListPair15(ushort Key, int Value)
+{
+    internal void Write(LoginWriter w) => w.U16(Key).VarintS(Value);
+    internal static ListPair15 Read(ref LoginReader r) => new(r.U16(), r.VarintS());
+}
+
+/// <summary>
+/// S→C 0x15, client 0.5.5 (factory 0x14214fbe0: vtable 0x143509f98, object 0x78 bytes; write 0x14214df90,
+/// read 0x14214e210; disassembly-verified 2026-11-04): a big-endian u32 (+0x70), the entries as u8 count +
+/// elements (vector at +0x10), two bytes (+0x28/+0x29 — same slots as the PoE1 era's selected index and
+/// character slots), two big-endian u16 (+0x74/+0x76), a narrow string (+0x30, reader 0x141f4d500), the pair
+/// vector (+0x48), and two big-endian u32 (+0x68/+0x6c). Nothing of the PoE1-era tail blob remains. The new
+/// scalar fields' meanings are unknown; they are sent 0/empty.
+/// </summary>
+public sealed record List15(uint Head32, IReadOnlyList<ListEntry15> Entries, byte B28, byte B29,
+    ushort U74, ushort U76, string Text30, IReadOnlyList<ListPair15> Pairs, uint Tail68, uint Tail6C) : ILoginMessage
 {
     public const ushort Id = 0x15;
     public ushort MessageId => Id;
     public void WriteFields(LoginWriter w)
     {
-        w.U8(checked((byte)Entries.Count));
+        w.U32(Head32).U8(checked((byte)Entries.Count));
         foreach (var e in Entries) e.Write(w);
-        w.U8(B28).U8(B29).Blob(Data);
+        w.U8(B28).U8(B29).U16(U74).U16(U76).Str(Text30);
+        w.VarintU(checked((uint)Pairs.Count));
+        foreach (var p in Pairs) p.Write(w);
+        w.U32(Tail68).U32(Tail6C);
     }
     internal static List15 Read(ushort id, ref LoginReader r)
     {
+        uint head = r.U32();
         int n = r.U8();
         var list = new List<ListEntry15>(n);
         for (int i = 0; i < n && !r.Short; i++) list.Add(ListEntry15.Read(ref r));
-        return new(list, r.U8(), r.U8(), r.Blob());
+        byte b28 = r.U8(), b29 = r.U8();
+        ushort u74 = r.U16(), u76 = r.U16();
+        string text = r.Str();
+        uint np = r.VarintU();
+        var pairs = new List<ListPair15>();
+        for (uint i = 0; i < np && !r.Short; i++) pairs.Add(ListPair15.Read(ref r));
+        return new(head, list, b28, b29, u74, u76, text, pairs, r.U32(), r.U32());
     }
 }
 
@@ -153,20 +205,23 @@ public sealed record List15(IReadOnlyList<ListEntry15> Entries, byte B28, byte B
 /// </list>
 /// Description (+0x40, view +0x30): the card text, a ClientStrings-style key when it starts with '#'; empty crashes the
 /// client ("invalid string position", 0x140cc8820). The times (+0xd0, +0xd8, +0xc8, little-endian) are unconfirmed;
-/// RawC4 defaults to 0xd1.
+/// Client 0.5.5 entry reader (0x142716e10, disassembly-verified 2026-11-03): the wire tail after the three raw64s
+/// is SIX u8s — flags0/1/2 (+0xe0..0xe2), StartStateSet (+0xc0), C1 (+0xc1) and C2 (+0xc2, meaning unknown, sent 0).
+/// There is NO trailing raw32: the older layout (raw32 at +0xc4) writes 3 bytes too many per entry, desyncs every
+/// following entry and makes the 0.5.5 client throw "Protocol violation reading wstring from the network" on 0x1b.
 /// </summary>
 public sealed record LeagueEntry(string Name, string Description, string SsfParent, string HardcoreParent, string RuthlessParent,
-    ulong RawD0, ulong RawD8, ulong RawC8, byte Flags0, byte Flags1, byte Flags2, byte StartStateSet, byte C1, uint RawC4)
+    ulong RawD0, ulong RawD8, ulong RawC8, byte Flags0, byte Flags1, byte Flags2, byte StartStateSet, byte C1, byte C2)
 {
     public const byte Private = 0x01, Hardcore = 0x02, Timed = 0x10, Main = 0x80;
     public const byte Variant = 0x02, PlatformHidden = 0x20, Ruthless = 0x40;
 
     internal void Write(LoginWriter w) =>
         w.WStr(Name).WStr(Description).WStr(SsfParent).WStr(HardcoreParent).WStr(RuthlessParent).RawU64(RawD0).RawU64(RawD8).RawU64(RawC8)
-         .U8(Flags0).U8(Flags1).U8(Flags2).U8(StartStateSet).U8(C1).RawU32(RawC4);
+         .U8(Flags0).U8(Flags1).U8(Flags2).U8(StartStateSet).U8(C1).U8(C2);
     internal static LeagueEntry Read(ref LoginReader r) =>
         new(r.WStr(), r.WStr(), r.WStr(), r.WStr(), r.WStr(), r.RawU64(), r.RawU64(), r.RawU64(),
-            r.U8(), r.U8(), r.U8(), r.U8(), r.U8(), r.RawU32());
+            r.U8(), r.U8(), r.U8(), r.U8(), r.U8(), r.U8());
 
     internal static void WriteList(LoginWriter w, IReadOnlyList<LeagueEntry> list)
     {
@@ -275,6 +330,21 @@ public sealed record StringList47(uint A, ushort B, IReadOnlyList<string> Items)
 }
 
 // ---------------------------------------------------------------- client → server
+
+/// <summary>
+/// C→S 0x18: the character screen asking for the character list, answered with S→C 0x15. The PoE1-era message
+/// was empty; the 0.5.5 client appends a u32 — four zero bytes on the wire, live 2026-11-04 06:50. Decoded as
+/// empty, the stream desynced at that point and every later message on the connection (the create-character
+/// 0x12 included) was silently dropped, leaving the client waiting forever. The u32's meaning is unknown;
+/// the value is ignored.
+/// </summary>
+public sealed record CharacterListRequest(uint Value) : ILoginMessage
+{
+    public const ushort Id = 0x18;
+    public ushort MessageId => Id;
+    public void WriteFields(LoginWriter w) => w.U32(Value);
+    internal static CharacterListRequest Read(ushort id, ref LoginReader r) => new(r.U32());
+}
 
 /// <summary>
 /// C→S 0x03 (vtable 0x1435d8b88, write 0x14213c660, senders 0x14213ea10 and 0x140d05f70): account login.
@@ -417,7 +487,7 @@ public static class LoginCodec
         [0x01] = ReadEmpty, [0x02] = ReadKeyExchange, [0x03] = AccountLogin.Read, [0x05] = TokenLogin.Read,
         [0x06] = TicketLogin.Read, [0x07] = TicketLogin.Read, [0x08] = U32Raw64.Read, [0x0a] = TwoDigests.Read,
         [0x0c] = WStringU8Message.Read, [0x0e] = U8U32.Read, [0x12] = CreateCharacter.Read,
-        [0x18] = ReadEmpty, [0x19] = ReadEmpty, [0x1c] = TwoU16.Read, [0x21] = ReadEmpty, [0x22] = HexCode.Read,
+        [0x18] = CharacterListRequest.Read, [0x19] = ReadEmpty, [0x1c] = TwoU16.Read, [0x21] = ReadEmpty, [0x22] = HexCode.Read,
         [0x23] = ReadEmpty, [0x2a] = WStringU8Message.Read, [0x2b] = WStringU8Message.Read, [0x2c] = EpicLogin.Read,
         [0x39] = ReadEmpty, [0x3a] = U8Message.Read, [0x3d] = TwoWStringsBool.Read,
         [0x3f] = WStringMessage.Read, [0x40] = WStringMessage.Read, [0x42] = U8Message.Read, [0x46] = U32Message.Read,

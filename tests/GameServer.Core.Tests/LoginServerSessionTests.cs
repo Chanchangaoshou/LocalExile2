@@ -126,10 +126,10 @@ public class LoginServerSessionTests
         Assert.Equal(LoginServerSession.FlagVerified, result.Flags0);
         Assert.IsType<LeagueList>(login[1]);
 
-        var list = Assert.IsType<List15>(Assert.Single(session.Handle(new EmptyMessage(0x18))));
+        var list = Assert.IsType<List15>(Assert.Single(session.Handle(new CharacterListRequest(0))));
         Assert.Equal(24, list.B29); // character slots: the Create Character button needs a free one
         var e = Assert.Single(list.Entries);
-        Assert.Equal(("CarolWitch", "Standard", (byte)1, (byte)CharacterClass.Witch), (e.Name, e.Text, e.B48, e.B4a));
+        Assert.Equal(("CarolWitch", "Standard", (ushort)1, (ushort)CharacterClass.Witch), (e.Name, e.Text, e.Level, e.Class));
 
         var info = Assert.IsType<InstanceInfo>(Assert.Single(session.Handle(new U8U32(0, 0))));
         Assert.Equal(("127.0.0.1", (ushort)6112, (ushort)0x235c), (info.Host, info.U16_30, info.AreaHash));
@@ -207,7 +207,7 @@ public class LoginServerSessionTests
         // The list goes first: the client looks the new character up in it when 0x13 arrives, then sends Play.
         var e = Assert.Single(Assert.IsType<List15>(replies[0]).Entries);
         Assert.Equal(LoginServerSession.ResultOk, Assert.IsType<CreateCharacterResult>(replies[1]).Result);
-        Assert.Equal(("ErinRanger", "Hardcore Allflame", (byte)CharacterClass.Ranger), (e.Name, e.Text, e.B4a));
+        Assert.Equal(("ErinRanger", "Hardcore Allflame", (ushort)CharacterClass.Ranger), (e.Name, e.Text, e.Class));
         Assert.Equal("Hardcore Allflame", Assert.Single(accounts.Characters(acc.Id)).League);
 
         Result(LoginServerSession.ResultCharacterNameTaken, new CreateCharacter("ErinRanger", "Standard", 0, 0, "Metadata/Characters/Dex/Dex", new byte[32]));
@@ -249,7 +249,7 @@ public class LoginServerSessionTests
     public void Nothing_but_login_is_answered_before_logging_in()
     {
         var session = new LoginServerSession(new AccountService(new JsonAccountStore()));
-        Assert.Empty(session.Handle(new EmptyMessage(0x18)).OfType<List15>().SelectMany(l => l.Entries));
+        Assert.Empty(session.Handle(new CharacterListRequest(0)).OfType<List15>().SelectMany(l => l.Entries));
         Assert.Empty(session.Handle(new U8U32(0, 0)));
     }
 }
