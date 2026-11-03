@@ -63,9 +63,11 @@ public sealed record ClientLayout(
     public static readonly ClientLayout Poe1_3293b = new("PoE1 3.29.3b", 0x346, 0x350, 0x4d0, 384);
 
     /// <summary>PoE2 Steam client: server static public sits immediately *before* the SPKI (verified a
-    /// subgroup element); the client static private exponent has not been located yet
-    /// (see PORTING-POE2.md) — the static DH half may have moved or changed.</summary>
-    public static readonly ClientLayout Poe2 = new("PoE2", 0x346, null, -0x180, 384);
+    /// subgroup element); the client static private exponent sits at the same +0x350 offset as PoE1 (the client's keys
+    /// object points at that slot exactly like PoE1's does), but the value is a 268-bit exponent:
+    /// the first 350 bytes of its 384-byte field are zero, so the slot reads as zeroed unless the
+    /// tail is checked.</summary>
+    public static readonly ClientLayout Poe2 = new("PoE2", 0x346, 0x350, -0x180, 384);
 }
 
 /// <summary>
