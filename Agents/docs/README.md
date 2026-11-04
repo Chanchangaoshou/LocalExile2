@@ -55,6 +55,7 @@ How to regenerate them: [re/tooling.md](re/tooling.md) §7.
 |---|---|
 | [../GettingStarted.md](../GettingStarted.md) | setup from a fresh clone, third-party tools, troubleshooting |
 | [re/tooling.md](re/tooling.md) | Ghidra headless scripts, Python helpers, GGPK dump tool, Frida through REA, recipes |
+| [re/poe2-055/README.md](re/poe2-055/README.md) | **PoE2 0.5.5.5 research archive**: local-server status, proven protocol facts, the Frida probe and RE tooling, ExileDeck2 source, and [open problems + roadmap](re/poe2-055/OPEN-PROBLEMS.md) (world never ticks; class display) |
 | [re/011-level-generation.md](re/011-level-generation.md) | the client's level generator: stages, RNG, topology pick, tile hash, generation traces; the server port in progress |
 | [dev/debugging.md](dev/debugging.md) | log timestamps and archives, error stack traces, the packet history and dumps, `Game_TRACE`, client crashes, `bugreport.ps1` |
 | [dev/editable-game-data.md](dev/editable-game-data.md) | what game data can become editable in SQLite, the client-compatibility boundary, the snapshot/cache design and the phased plan |

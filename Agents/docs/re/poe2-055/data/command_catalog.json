@@ -1,0 +1,382 @@
+[
+ {
+  "name": "mod",
+  "usage": "/mod (the mods in Mods/Binaries/: loaded ones with their version, kind and hooks, and why the others are not)"
+ },
+ {
+  "name": "mod_reload",
+  "usage": "/mod_reload [id] (reload one mod and the mods that depend on it from its folder, or every mod; their state starts over)"
+ },
+ {
+  "name": "mod_enable",
+  "usage": "/mod_enable <id> (load a mod, now and at every start)"
+ },
+ {
+  "name": "mod_disable",
+  "usage": "/mod_disable <id> (unload a mod and the mods that depend on it, now and at every start)"
+ },
+ {
+  "name": "raw",
+  "usage": "/raw <hex> (send one S→C message)"
+ },
+ {
+  "name": "set_speed",
+  "usage": "/set_speed <percent> (100 = normal)"
+ },
+ {
+  "name": "set_stat",
+  "usage": "/set_stat <stat name or client key> <value|off> (off removes the dev replacement)"
+ },
+ {
+  "name": "stat",
+  "usage": "/stat <stat name or client key> (dev: current character stat value)"
+ },
+ {
+  "name": "spawn_mob",
+  "usage": "/spawn_mob <MonsterVarieties row, Id or name>[@level] [friendly] [normal|magic|rare|unique] [name]"
+ },
+ {
+  "name": "item",
+  "usage": "/item <BaseItemTypes row, Id, name or unique> [count] [magic|rare] (into the inventory, e.g. /item Small Life Flask 2, /item Iron Ring rare, /item Mageblood)"
+ },
+ {
+  "name": "stash_place",
+  "usage": "/stash_place <x> <y> <degrees> (dev: move and turn the stash of this area until you leave it; it opens from its new cell)"
+ },
+ {
+  "name": "guild_stash_place",
+  "usage": "/guild_stash_place <x> <y> <degrees> (dev: move and turn the guild stash of this area until you leave it)"
+ },
+ {
+  "name": "delve_crawler",
+  "usage": "/delve_crawler [x y degrees] (dev: create the Delve Crawler in the Azurite Mine Encampment, or move and turn the one there; a click on it opens the Subterranean Chart)"
+ },
+ {
+  "name": "wp_place",
+  "usage": "/wp_place [x y degrees] (dev: move and turn this area's waypoint; without arguments shows where it is)"
+ },
+ {
+  "name": "wp_state",
+  "usage": "/wp_state active <n> | bits all|none|area|<bit> | model <.ao> (dev: recreate this area's waypoint with StateMachine \"active\" n or another model, or send 0x4c with all, no, this area's or one bit, to find what lights it)"
+ },
+ {
+  "name": "sulphite",
+  "usage": "/sulphite <amount 0-65535> (dev: the character's Voltaxic Sulphite, saved and sent as the Delve data 0x228)"
+ },
+ {
+  "name": "item_tab",
+  "usage": "/item_tab <stash tab name> <count> (dev: up to count, at most {ItemTabMax}, more of every item type that has its own slot on that tab, as far as each slot holds, e.g. /item_tab Currency 1000)"
+ },
+ {
+  "name": "adorned",
+  "usage": "/adorned [0-1000] (dev: The Adorned unique jewel into the inventory, corrupted, for passive-jewel testing; the normal item range is 0-100)"
+ },
+ {
+  "name": "unique_jewel",
+  "usage": "/unique_jewel <name> | list (dev: a global unique jewel, max-rolled, into the inventory)"
+ },
+ {
+  "name": "radius_jewel",
+  "usage": "/radius_jewel <name> | list (dev: a radius unique jewel, max-rolled, into the inventory; pilot: the six attribute-conversion jewels)"
+ },
+ {
+  "name": "impossible_escape",
+  "usage": "/impossible_escape <keystone> | list (dev: Impossible Escape for that keystone, into the inventory)"
+ },
+ {
+  "name": "tattoo",
+  "usage": "/tattoo <name> | list (dev: a tattoo currency item into the inventory)"
+ },
+ {
+  "name": "tattoo_apply",
+  "usage": "/tattoo_apply <tattoo name> <node> (dev: apply a pilot tattoo to an allocated passive)"
+ },
+ {
+  "name": "journey_makanui",
+  "usage": "/journey_makanui <node> [keystone] (dev: apply Journey Makanui, random or chosen)"
+ },
+ {
+  "name": "tattoo_remove",
+  "usage": "/tattoo_remove <node> (dev: remove the tattoo from a passive)"
+ },
+ {
+  "name": "timeless",
+  "usage": "/timeless <name> [seed] [conqueror] | list (dev: a Legion timeless jewel into the inventory; Elegant Hubris seeds are the displayed x20 values 2000-160000)"
+ },
+ {
+  "name": "voices",
+  "usage": "/voices [1|3|5|7] (dev: the Voices unique Large Cluster Jewel with that many empty passives, into the inventory)"
+ },
+ {
+  "name": "cluster_jewel",
+  "usage": "/cluster_jewel <small|medium|large> [passives] [sockets] [theme mod] [notable mod ...] (dev: a non-unique cluster jewel with its enchantments, into the inventory; defaults 3/4/8 passives and 0/1/2 sockets)"
+ },
+ {
+  "name": "corrupt",
+  "usage": "/corrupt (dev: marks the held item corrupted, e.g. to make a corrupted magic jewel)"
+ },
+ {
+  "name": "gem",
+  "usage": "/gem <name> [level] [quality] (a gem into the inventory at that level and quality, e.g. /gem Fireball 20 20, /gem Ice Nova of Frostbolts, /gem Vaal Fireball 5)"
+ },
+ {
+  "name": "gem_xp",
+  "usage": "/gem_xp <amount|near> (dev: set the experience of every gem in the inventory and the sockets; near = one below the next level's threshold)"
+ },
+ {
+  "name": "map_portal",
+  "usage": "/map_portal [type 1-4] [created 0|1] [open after ms, -1 never] [model 0-2] (dev: one MultiplexPortal next to you, listed in the map device's 0x8f)"
+ },
+ {
+  "name": "cosmetic",
+  "usage": "/cosmetic portal <name, number or part of a name> | /cosmetic list [filter] | /cosmetic off (the portal cosmetic: the shop effect replaces the base portal visual)"
+ },
+ {
+  "name": "portal_rotation",
+  "usage": "/portal_rotation <degrees> (dev: turn the map portals around the vertical axis; rebuilds the ones standing)"
+ },
+ {
+  "name": "item_mod",
+  "usage": "/item_mod [implicit|explicit|enchant|scourge|hidden] <Mods row, Id or part of it> [values…] | /item_mod set [section] <mod> [values…] | /item_mod clear [section] (the held item; missing values are rolled)"
+ },
+ {
+  "name": "roll",
+  "usage": "/roll <magic|rare> [item level] (new affixes and name for the held item)"
+ },
+ {
+  "name": "item_mods",
+  "usage": "/item_mods (the held item's rarity and mods)"
+ },
+ {
+  "name": "base_defence",
+  "usage": "/base_defence [0 to 31] (show or set the held armour's shared defence base roll)"
+ },
+ {
+  "name": "rarity",
+  "usage": "/rarity <normal|magic|rare|unique> [unid] (the held item)"
+ },
+ {
+  "name": "sockets",
+  "usage": "/sockets [colours] (the held item's sockets: R G B W, linked within a word, e.g. /sockets RRGBBB a 6-link, /sockets RRG B a 3-link and a single; without colours, shows them; Game_SOCKET_CAPACITY=1..6 lets any socketable base take that many, e.g. a 6-link wand)"
+ },
+ {
+  "name": "set_level",
+  "usage": "/set_level <1 to 100> (saved to the account; the level's experience and stats are sent at once)"
+ },
+ {
+  "name": "add_xp",
+  "usage": "/add_xp <amount> (experience as from a kill: levels up, saved)"
+ },
+ {
+  "name": "passives",
+  "usage": "/passives (passive skill points and the allocated passives)"
+ },
+ {
+  "name": "ascendancy",
+  "usage": "/ascendancy [normal|phrecia] [name] (list or choose; Phrecia play is gated pending client compatibility)"
+ },
+ {
+  "name": "ascendancy_points",
+  "usage": "/ascendancy_points <normal|cruel|merciless|eternal|all> (dev: grant each Labyrinth's two ascendancy points once)"
+ },
+ {
+  "name": "reset_ascendancy",
+  "usage": "/reset_ascendancy (refund all ascendancy nodes; five refund points per node/effect, choice shells are free)"
+ },
+ {
+  "name": "gold",
+  "usage": "/gold <amount> (dev: add gold, or take it with a negative amount; the account's, saved)"
+ },
+ {
+  "name": "add_passive_points",
+  "usage": "/add_passive_points <n> (dev: add n extra passive skill points, saved)"
+ },
+ {
+  "name": "add_refund_points",
+  "usage": "/add_refund_points <n> (dev: add n refund points, saved)"
+ },
+ {
+  "name": "add_passive",
+  "usage": "/add_passive <PassiveSkillGraphId> [...] (dev: allocate a connected set of passive nodes)"
+ },
+ {
+  "name": "reset_passives",
+  "usage": "/reset_passives (refunds every passive, saved)"
+ },
+ {
+  "name": "resistances",
+  "usage": "/resistances (your uncapped and capped fire/cold/lightning/chaos resistance)"
+ },
+ {
+  "name": "hit",
+  "usage": "/hit <fire|cold|lightning|chaos|physical> <damage> (dev: incoming enemy test contact through resistances or armour)"
+ },
+ {
+  "name": "suppression",
+  "usage": "/suppression (Spell Suppression chance, roll and damage reduction)"
+ },
+ {
+  "name": "suppression_luck",
+  "usage": "/suppression_luck <lucky|unlucky|off> (dev: force a lucky/unlucky suppression roll)"
+ },
+ {
+  "name": "accuracy",
+  "usage": "/accuracy [monster level] (accuracy rating and attack hit chance; default: your level)"
+ },
+ {
+  "name": "defences",
+  "usage": "/defences [monster level] (armour, evasion and avoidance; default: your level)"
+ },
+ {
+  "name": "auras",
+  "usage": "/auras (active auras, their reservation and the character's efficiency)"
+ },
+ {
+  "name": "spellhit",
+  "usage": "/spellhit <fire|cold|lightning|chaos|physical> <damage> (dev: spell hit through resistance and Spell Suppression)"
+ },
+ {
+  "name": "crit",
+  "usage": "/crit (attack and spell critical strike chance and multiplier)"
+ },
+ {
+  "name": "block",
+  "usage": "/block (attack and spell block chance and caps)"
+ },
+ {
+  "name": "block_luck",
+  "usage": "/block_luck <attack|spell|both|off> (dev: force lucky block)"
+ },
+ {
+  "name": "blockhit",
+  "usage": "/blockhit <attack|spell> <fire|cold|lightning|chaos|physical> <damage> (dev: hit through block and resistance)"
+ },
+ {
+  "name": "god",
+  "usage": "/god (toggles: 1000% increased attack and cast speed, 100% of life and 10 000 mana regenerated per second, 200% increased area of effect, +10 000 life, +1000 attributes)"
+ },
+ {
+  "name": "set_aoe",
+  "usage": "/set_aoe <percent> | off (dev: the character's increased area of effect, base_skill_area_of_effect_+%, in place of what passives, items and /god give)"
+ },
+ {
+  "name": "heal",
+  "usage": "/heal (full life; also revives: 0x1b1 from 0 runs the client's revive)"
+ },
+ {
+  "name": "death_screen",
+  "usage": "/death_screen [hex flags] (show the death screen; default: this league's; 2 hides it)"
+ },
+ {
+  "name": "transition",
+  "usage": "/transition [pos [here | x y | +dx +dy] | rot <degrees> | z <z | none> | model <path | none> | index <n>] "
+ },
+ {
+  "name": "quest_flag",
+  "usage": "/quest_flag [<QuestFlags Id> [off]] (dev: list, set or clear quest flags, e.g. /quest_flag a1q1-KilledHillock)"
+ },
+ {
+  "name": "delve_chart",
+  "usage": "/delve_chart <u32> <u16> [<u16> <u16> <u64> <u8> <u32> ...] (dev: what the next Delve chart (S→C 0x240) carries, to work out its fields)"
+ },
+ {
+  "name": "atlas",
+  "usage": "/atlas [layout] (dev: show or choose the fallback layout generic maps open)"
+ },
+ {
+  "name": "atlas_tree",
+  "usage": "/atlas_tree (dev: open the Atlas passive tree; S→C 0x7b kind 0x11)"
+ },
+ {
+  "name": "atlas_points",
+  "usage": "/atlas_points [<n>] (dev: show or set the Atlas passive point budget, saved)"
+ },
+ {
+  "name": "goto",
+  "usage": "/goto <area id or name> [seed] (dev: change area as if through an area transition, e.g. /goto 1_1_3; with a seed, a new instance at that seed, e.g. /goto 1_1_5 1384217569)"
+ },
+ {
+  "name": "tour",
+  "usage": "/tour <list file> | stop | status (dev, live.ps1 -Walkmaps: visit every \"<area id> <seed>\" of the file in a new instance and record it; levelgen tourlist writes one)"
+ },
+ {
+  "name": "league_flag",
+  "usage": "/league_flag [<id> [off]] (dev: list, set or clear league quest flags by the client's id, e.g. /league_flag 350)"
+ },
+ {
+  "name": "hideout_keys",
+  "usage": "/hideout_keys <a> <b> (dev: the Player component's two Hideouts.dat keys, HASH16 hex or a hideout area id)"
+ },
+ {
+  "name": "waypoints",
+  "usage": "/waypoints [all | reset] (list the activated waypoints; dev: activate all and visit every pinned area, or keep only the towns')"
+ },
+ {
+  "name": "npc",
+  "usage": "/npc <NPCs row, Id or name> [rotation°] (spawns an NPC next to you)"
+ },
+ {
+  "name": "npc_place",
+  "usage": "/npc_place <name> <x> <y> <degrees> (dev: move and turn an NPC here)"
+ },
+ {
+  "name": "npc_face",
+  "usage": "/npc_face <name> <degrees> (turn an NPC here)"
+ },
+ {
+  "name": "ui",
+  "usage": "/ui <kind hex> [a] [b] [c] [d] (S→C 0x7b open a UI)"
+ },
+ {
+  "name": "npcs",
+  "usage": "/npcs (list NPCs here)"
+ },
+ {
+  "name": "pos",
+  "usage": "/pos (your cell)"
+ },
+ {
+  "name": "game_data",
+  "usage": "/game_data reload | reference | mod <mod> <stat> <min> <max> | clear_mod <mod> [stat] | limit <key> <value> | clear_limit <key> | setting <key> <value> | clear_setting <key> | settings | list (dev: SQLite game-data overrides; no restart)"
+ },
+ {
+  "name": "lastpackets",
+  "usage": "/lastpackets [n] (dev: the connection's last n messages, both directions, to the Gateway log; default 64)"
+ },
+ {
+  "name": "tp",
+  "usage": "/tp <x> <y> | <+dx> <+dy> | <id> | <name> [n] | list [filter] (dev: teleport to a cell, a monster, NPC, transition, waypoint or captured object, e.g. /tp RhoaChest 2)"
+ },
+ {
+  "name": "mobs",
+  "usage": "/mobs (list spawned monsters)"
+ },
+ {
+  "name": "despawn",
+  "usage": "/despawn [all | <id>] (default: the last one spawned)"
+ },
+ {
+  "name": "mob_move",
+  "usage": "/mob_move [id] [speed] (0x1ba toward you; default the last monster, speed 20)"
+ },
+ {
+  "name": "mob_walk",
+  "usage": "/mob_walk [id] [skill hex] (0x1ab Move toward you)"
+ },
+ {
+  "name": "anim",
+  "usage": "/anim <index> [speed] (0x1b2 kind 0: play an animation on the nearest monster)"
+ },
+ {
+  "name": "mob_mods",
+  "usage": "/mob_mods [id] [mod …|pool] (a monster's mods; with mods: create it again with those affixes, e.g. /mob_mods Quick of_Flames)"
+ },
+ {
+  "name": "mob_tp",
+  "usage": "/mob_tp [id] (0x1b7 next to you; default the last monster)"
+ },
+ {
+  "name": "ai",
+  "usage": "/ai [on|off] (monsters chase you when you come near; emerge monsters rise either way)"
+ }
+]
