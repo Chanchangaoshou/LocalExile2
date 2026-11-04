@@ -46,7 +46,7 @@ E:\poe2-local\Content.ggpk 提取的 datc64 行数。(待第二批提取后补�
 | ShieldTypes | ItemCatalog.LoadShieldBlocks | BaseItemTypesKey,Block | 98 | 203 | 待核 |
 | ArmourTypes | ItemCatalog.LoadDefences | BaseItemTypesKey,ArmourMin/Max,EvasionMin/Max,EnergyShieldMin/Max,WardMin/Max(PoE2 为单值列,见待验) | 481 | 1280 | 结构不符 |
 | Flasks | ItemCatalog.LoadFlasks;UtilityFlasks | BaseItemTypesKey,LifePerUse,ManaPerUse,RecoveryTime,RecoveryTime2,BuffDefinitionsKey | 51 | 31 | 待核 |
-| BuffDefinitions | UtilityFlasks | Id,StatsKeys(PoE2 名 Stats),GrantedFlags | (2.5MB) | 3218 | 不符(PoE1) |
+| BuffDefinitions | UtilityFlasks | Id,StatsKeys(PoE2 名 Stats),GrantedFlags | (2.5MB) | 3218 | 待核 |
 | BuffTemplates | UtilityFlasks | Buff_StatValues 等 | (199KB) | 665 | 待核 |
 | IndexableSkillGems | GemVendorStock | IndexRuthless,SkillGem2 | 有 | 无此表(全索引检索 0 命中) | PoE2 无此表 |
 | GrantedEffects | SkillCatalog 多处 | Id,StatSet1(PoE2 名 StatSet),StatSet2(PoE2 为 AdditionalStatSets),ActiveSkill,CastTime,AddedActiveSkillTypes | 12829 | 8349 | 不符(PoE1) |
@@ -114,7 +114,8 @@ ComponentCharges、CurrencyItems、WeaponTypes、ShieldTypes、ArmourTypes、Fla
 ItemExperiencePerLevel、ItemExperienceTypes、Words、UniqueStashLayout、GrantedEffects、
 GrantedEffectsPerLevel、GrantedEffectStatSets、GrantedEffectStatSetsPerLevel、
 ActiveSkills、ActiveSkillType、ActionTypes、Characters、CraftingItemClassCategories、
-PassiveJewelSlots、DelveUpgrades、DelveFlares、DelveDynamite,共 32 张已生成 staging
+PassiveJewelSlots、DelveUpgrades、DelveFlares、DelveDynamite、BuffDefinitions、
+BuffTemplates、GrantedEffectQualityStats,共 35 张已生成 staging
 文件(+UniqueMaps 按空表生成 []),别名映射按第一节消费者字段逐表补齐(明细在
 导出器 ALIASES 表)。SkillGems 另按 GemType==1 注入 IsSupport(与「基底 ItemClass==
 19 Support Skill Gem」第二判据 1191/1191 全量一致)。
@@ -123,10 +124,26 @@ PassiveJewelSlots、DelveUpgrades、DelveFlares、DelveDynamite,共 32 张已生
 Characters 行宽 640 与此前 GGPK 原表核对一致;UniqueStashLayout 449 行 × 83B 与
 ExileDeck2 的独立结果一致。
 
-尚缺 6 个 datc64(ComponentAttributeRequirements、BuffDefinitions、BuffTemplates、
-IndexableSkillGems、GrantedEffectQualityStats、VillageUniqueDisenchantValues),
-已并入一次性补提脚本,待协调窗口(用户真机测试结束)执行后同批部署;
-VillageUniqueDisenchantValues 在第一批 37 个文件名中未命中,PoE2 GGPK 或无此表。
+补提批结果(2026-11-04 17:18–17:21,提取清单与时间窗见文首):
+- **已解码进 staging(行宽校验通过= schema 列宽总和 == dat 实际行宽,导出器硬校验)**:
+  BuffDefinitions 3218 行 × 351 B(基准版 1,679,844 B,SHA-256 2399071c…);
+  BuffTemplates 665 行 × 139 B(141,869 B,SHA-256 8b8f1b10…);
+  GrantedEffectQualityStats 429 行 × 144 B(73,600 B,SHA-256 d33100f0…)。
+  别名沿用第一批 ALIASES 约定:BuffDefinitions 的 StatsKeys←Stats、
+  BuffTemplates 的 BuffDefinitionsKey←BuffDefinition、GrantedEffectQualityStats 的
+  GrantedEffectsKey←GrantedEffect 与 StatsKeys←Stats,均已核验在全部行上存在。
+  staging 现共 36 个文件(35 表 + UniqueMaps 空表)。
+- **PoE2 GGPK 无此表(已实证)**:ComponentAttributeRequirements、IndexableSkillGems、
+  VillageUniqueDisenchantValues——全名检索与词干检索(componentattribute /
+  indexableskill / disenchant)在提取器全索引上均为 0 个 dat 命中(词干检索只能
+  排除同名族改名,完全异名无法排除,此点如实保留)。schema.min.json 里这三张只有
+  validFor=3 的旧代布局,与「PoE2 已移除/未随包」一致。部署含义:这三张表 staging
+  无文件,部署步骤(第 3 步)覆盖时它们将保持现行旧代文件不动——消费者
+  ItemCatalog.LoadRequirements、GemVendorStock、暗金分解值在 PoE2 侧的对应数据
+  来源需另行立项,不要用近名表硬凑。
+- 附带观察(未采用):disenchant 词干命中的唯一 dat 是
+  data/balance/itemdisenchantvalues.datc64(120 B,已留在目标机 Temp\ggx055b),
+  是「物品分解值」而非「村落暗金分解值」,未解码、未进 staging。
 
 部署与测试:待协调窗口执行(备份 *.bak-<时间戳> 后覆盖 D:\LocalExile2\data\tables,
 重启 Auth/Gateway 后跑 Core/Data 测试)。
@@ -144,6 +161,12 @@ VillageUniqueDisenchantValues 在第一批 37 个文件名中未命中,PoE2 GGPK
 - 药剂链数据自洽:FourFlaskLife1 = 基底 2623 行,Flasks 行 LifePerUse 50/RecoveryTime 30,
   ComponentCharges 按 Id 命中(MaxCharges 60),31/31 药剂全有 charges 行;缺的只是
   StartKit 写死的旧 Id(发现 5)。
+- 补提 3 表外键范围校验(已实证):BuffDefinitions.StatsKeys 最大索引 27089 < Stats
+  27281 行,药剂 buff 可解析(flask_effect_life → Stats[7216]、flask_effect_mana →
+  Stats[7217]);BuffTemplates.BuffDefinitionsKey 最大 3217 < BuffDefinitions 3218 行;
+  GrantedEffectQualityStats.GrantedEffectsKey 最大 8342 < GrantedEffects 8349 行、
+  StatsKeys 最大 26705、AltStats 最大 26685,均 < Stats 27281 行。三表行宽校验均由
+  导出器硬校验通过(见第三节)。
 - 待协调窗口补:PC 上 Core/Data 测试结果、部署后对部署目录重跑同一检查。
 
 ## 五、遗留待验 / 结构性问题(不在本次数据层修复范围)
