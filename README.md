@@ -1,91 +1,44 @@
-# Important Notice
-It's important to note that LocalExile is not an official Grinding Gear Games product, and it is not affiliated with or endorsed by Path of Exile or Grinding Gear Games. LocalExile does not in any case sponsor nor support illegal public servers. If you use this project to run an illegal public server and not for testing and learning it is your own personal choice.
+# LocalExile2
 
-This project is for fun and education only. It is intended for local-gameplay with no internet much like MMO Solutions (TrinityCore, AzerothCore, MangOS).
-Everything here is made by Claude Opus 5.5. You can pull-request and are encouraged to. I'm running only on two pro subs
-and Im broke and unemployed, so help out folks.
+《流放之路 2》(Path of Exile 2)**0.5.5 客户端**的本地服务器实现:C#/.NET,全部在本机 127.0.0.1 上运行,单机游玩与协议研究用。
 
-[Join Discord](https://discord.gg/pd2Fd5M6Hd)
+本项目的协议实现与数据**全部以 0.5.5 客户端自身为据**——从客户端二进制与 GGPK 数据逆向得出,逐项以真机日志/抓包验证。结论分三级标注:已实证 / 推断 / 待验假设,未验证的不写成已完成。
 
-# To get started [Humans]
-- Open up a Frontier Model (such as Claude Opus 5.5) and tell them to set-up this project on your machine. 
-- Tell them to read all the Agents/ folder and all the MD files.
+与 Grinding Gear Games 无关;不含任何游戏文件、密钥或账号数据,使用需自备正版客户端。
 
-# LocalExile
-A local, from-scratch server for the Path of Exile **3.29.3b** client. It is written in C# (.NET 10) from scratch to serve 
-the client's network protocol. You play on your own machine against servers running on 127.0.0.1.
+## 当前状态
 
-This project is not affiliated with or endorsed by Grinding Gear Games. It contains **no game files, keys or game data**.
-You need your own installed copy of the client, and everything the servers need is generated locally from it.
+已实证打通:
 
-## Showcase (Most recent to older)
-https://github.com/user-attachments/assets/e20dd43d-4453-40d4-8f81-eb902a87817f
+- 补丁通道(自签 CA + 本地补丁桩)、登录全链(密钥协商、账号登录)
+- 角色列表、创角、删角、选角
+- 实例连接加密(开场包与密钥流与客户端逐字节对齐)
+- 区域初始化包被客户端接受,河岸等区域可完整生成
 
-Items, NPCs, Stash, Waypoints [(youtube)](https://youtu.be/-QDRFEWCmpU)
+进行中:
 
-https://github.com/user-attachments/assets/fead9d6a-b2ce-4908-9e73-ccaaae78a08a
+- 世界激活与内容下发(见问题 1)
+- 选角界面职业显示(见问题 2)
+- 进图后的实体/战斗链路(M2-M5 路线:生成玩家 → 移动 → 技能打怪)
 
-Mobs, Loot, RF, Level/XP, Passive Tree (better quality showcase is on [youtube](https://www.youtube.com/watch?v=rfnCaXQaxBo))
+## 目前遭遇的问题
 
-https://github.com/user-attachments/assets/7b732013-2d04-4e81-a2fa-5437099f4b6d
+完整版见 [OPEN-PROBLEMS](Agents/docs/re/poe2-055/OPEN-PROBLEMS.md)(含已排除方向与后续思路),摘要:
 
-Spawning mobs in A1 Town
+1. **世界不 tick、玩家进不了图**:创建玩家的世界消息能被客户端正确解密并建出对象,但世界派发/激活链不完整——消息进队列后从未被派发,实体构造从未发生。已定位:0x23 内容消息能触发世界激活,但其合法内容值与记录格式尚未逆定(空内容会让客户端在区域生成期崩溃,已回滚)。下一步:逆定 0x23 的值与记录,或按实例工厂+全部专用 handler 的全目录做一次全链审计、成批对齐。
+2. **选角界面职业显示错误**:建的是女巫,列表显示野蛮人,头像也不对。已用抓包逐字节证伪:角色条目里的全部候选字段(五个位置先后写入职业号)都不影响显示——来源在条目之外。正在从头审计选角面板的数据绑定与登录层全部模型的来源,定位前不再逐字段猜改。
+3. **网关物品层数据表仍是旧代导出**:出生装备曾因宝石表行数不足越界崩溃(已加边界防护);整表需从 0.5.5 的 GGPK 全量重导,尚未完成。
+4. **区域包的两块编码未逆出**:联盟属性对表(flags 0x80)与地形块(flags1 0x04)的 0.5.5 线格式未解,涉及升华/深渊类内容时服务端拒绝发送、不猜格式。
+5. **两处已部署修复待真机验证**:删角确认包的加长修正(按客户端读函数改型)尚未实测;Play 报文的角色序号语义有一处疑点(与选角报文的指向可能不一致),待进图后一并核。
+6. **Gateway 测试套件 386 个既有失败**:已在父提交上证明与协议改动无关,是测试环境的数据目录缺键问题,单独排期。
+7. **重启脆弱性**:本地服务的五个进程与 hosts 重定向在电脑重启后会全部丢失,需人工恢复;开机自检/看门狗脚本在计划中。
 
-https://github.com/user-attachments/assets/ebb49e70-93aa-464f-a6cd-c6c130dd8c5a
+## 研究档案
 
-Character select, Lioneye's Watch, taking The Coast exit,
-and `/set_speed` in The Coast, all against the local servers.
+逆向笔记、问题清单、Frida 探针与静态分析工具在 [Agents/docs/re/poe2-055/](Agents/docs/re/poe2-055/),索引见该目录 README。档案只含本项目对 0.5.5 客户端的研究记录;不含游戏文件、密钥材料与账号数据。
 
-## What works
+## 路线
 
-- **Login:** the client's custom TCP login (Diffie-Hellman key exchange, DSA-signed server key, Salsa20), accounts and
-  the character list.
-- **Instance server (Gateway):** encryption, area load, player object, inventories, latency acks, visibility and
-  click-to-move.
-- **Lioneye's Watch → The Coast:** the exit loads the area. Ctrl+click opens the Instance Manager (list, join or create
-  instances). Towns have one instance, and empty instances expire after 6 minutes.
-- **Chat commands:** `/help`, `/set_speed <percent>`, `/set_stat <key> <value>`, `/raw <hex>`,
-  `/spawn_mob <monster>[@level] [friendly] [rarity] [name]` (a monster next to you that chases you), `/despawn`.
-
-Not done yet: skills and combat, server text as chat lines, exit to character selection, and exits
-beyond town. Details: [Agents/Status.md](Agents/Status.md).
-
-## Contributing
-
-People and AI agents are both welcome. Start with [AGENTS.md](AGENTS.md): the rules, then
-[Agents/Status.md](Agents/Status.md) (what works) and [Agents/Roadmap.md](Agents/Roadmap.md) (what to build next and
-how to pick up an item). The protocol reference and the notes are in
-[Agents/docs/](Agents/docs/README.md).
-
-## Projects
-
-| Project | Role | Port |
-|---|---|---|
-| `GameServer.Auth` | login server; also generates keys and patches the client to trust them | 20493 (login), 127.0.0.1:20495 (control) |
-| `GameServer.Gateway` | instance (game) server | 6112 |
-| `GameServer.Patch` | local patching server, so the client never contacts the real patch servers; also edits the GGPK gateway list | 12995, http 8080 |
-| `GameServer.Host` + `GameServer.DevClient` | dev account service (register accounts, create characters) | 7000 |
-| `GameServer.Core` | protocol, crypto, accounts, instance registry | |
-| `GameServer.Data` | GGPK / bundle / `.dat` readers | |
-| `GameServer.Storage` | JSON account store | |
-
-## Getting Started
-
-**Full guide: [Agents/GettingStarted.md](Agents/GettingStarted.md).** It covers every step with its expected output, the edge cases
-and a troubleshooting table. It is written for people and for AI agents setting this up.
-
-In short (Windows, .NET 10 SDK, a standalone Path of Exile **3.29.3b** client):
-
-```powershell
-dotnet build GameServer.slnx
-robocopy "<your PoE 3.29.3b folder>" Client /E; Copy-Item Client\PathOfExile.exe Client\Game.exe
-dotnet run --project src/GameServer.Auth -- keygen Client/Game.exe
-dotnet run --project src/GameServer.Auth -- patch Client/Game.exe Client/Game.patched.exe
-dotnet run --project src/GameServer.Patch -- gateway --login 127.0.0.1:20493
-# needs Node.js (+ npm install in Tools/ooz) and Python 3.9+: live.ps1 extracts the game data first (scripts/dev/extract-data.ps1)
-# create an account + character: GameServer.Host and GameServer.DevClient (Agents/GettingStarted.md, step 8)
-.\scripts\dev\live.ps1 -Walkmaps   # -Walkmaps is optional: needs `pip install frida`, captures walk maps
-```
-
-**Always start the client through `live.ps1`.** Started any other way, the client contacts the official patch servers
-and may update itself.
+- M1 登录与选角:已达成(2026-11-04 真机确认)
+- M2 进图与世界激活:进行中(问题 1)
+- M3-M5 移动、刷怪、技能伤害判定:待 M2
