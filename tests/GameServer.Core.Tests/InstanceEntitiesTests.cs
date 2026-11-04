@@ -80,8 +80,8 @@ public class InstanceEntitiesTests
         string pool(uint v) => Convert.ToHexString(BitConverter.GetBytes(v)) + "00000000" + "0000" + "00000000" + "00000000"; // current, reserved 0
         string expected =
             "00" + "00" +                                                     // flags, base data
-            "73000000" + "45000000" + "00000000" + "0000" + "0002" + "0001" + // Positioned, flags1 0x02: not hidden, shown
-            "00" + "00000000" + "00000000" + "00" +                           // comp1
+            "73000000" + "45000000" + "00000000" + "0000" + "00" + "02" + "00" + "0001" + // Positioned 0.5.5: flagsA 0, flagsB 0x02, flagsC 0, not hidden, shown
+            "00" + "000000000000" + "00000000" + "00" + "00" +                 // Stats 0.5.5: no pairs, empty gate section, u32+u8+u8 tail
             "0000" +                                                          // comp3
             pool(50) + pool(40) + pool(0) + "00" +                            // Life
             "00" +                                                            // Animated
@@ -113,8 +113,8 @@ public class InstanceEntitiesTests
             Skills: [new GrantedSkill(0x0102, 4474, 4430, stats)], Stats: stats).Blob();
         string hex = Convert.ToHexString(b);
         const string statList = "02" + "8142" + "8341" + "8117" + "02";       // compact: count, key 0x142 = 833, key 0x117 = 2
-        Assert.StartsWith("0000" + "73000000" + "45000000" + "00000000" + "0000" + "0002" + "0001" + // flags, base, Positioned
-            statList + "00000000" + "00000000" + "00", hex);                  // comp1 = Stats
+        Assert.StartsWith("0000" + "73000000" + "45000000" + "00000000" + "0000" + "00" + "02" + "00" + "0001" + // flags, base, Positioned 0.5.5
+            statList + "000000000000" + "00000000" + "00" + "00", hex);       // Stats 0.5.5: pairs, empty gate section, u32+u8+u8 tail
         string actor =
             "00000000" + "0000" + "00" + "00000000" + "00000000" +           // Actor main body
             "4000" +                                                          // slot 20: f0 0x40 = skill list

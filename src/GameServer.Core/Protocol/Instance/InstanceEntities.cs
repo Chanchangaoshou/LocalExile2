@@ -935,14 +935,17 @@ public sealed record PlayerObject(string Name, byte ClassIndex, int GridX, int G
         var w = new BlobWriter();
         w.U8(0);            // object flags (0x141ebe190: bit0 → +0x8c|0x80, bit1 → +0x8d|2)
         w.U8(0);            // base data entry count (0x141dea920)
-        // Positioned (0x141e2f0b0): x, y, u32 +0x29c, u16 +0x1e0, two flag bytes. The type's +0x21 prefix (Sector) is off.
-        // flags1 0x02 adds two bytes: hidden (→ +0x1e7 bit0) and shown (→ +0x1e5 bit3); both changes call the object's
-        // vtable +0xb0 (visibility). Without "shown" the player entity exists but its model is not drawn.
-        w.I32(GridX).I32(GridY).U32(0).U16(0).U8(0).U8(Shown ? (byte)0x02 : (byte)0);
+        // Positioned in 0.5.5 (read 0x141dd89a0, vtable 0x1434d24f8): x, y, u32, u16 team, then THREE flag bytes
+        // (flagsA, flagsB, flagsC). The definition-gated Sector prefix is off for IntFour ([def+0x29] = 0). flagsB
+        // 0x02 adds two bytes: hidden and shown; without "shown" the player entity exists but its model is not drawn.
+        w.I32(GridX).I32(GridY).U32(0).U16(0).U8(0).U8(Shown ? (byte)0x02 : (byte)0).U8(0);
         if (Shown) w.U8(0).U8(1);
-        // comp1 = Stats (0x1421c2f40): compact-int count of (compact-int key, value) pairs, then u32 +0x28, u32 +0x2c, u8
-        // +0x30. Keys are the client's stat ids (Stats.dat row + 1).
-        w.Stats(Stats).U32(0).U32(0).U8(0);
+        // Stats in 0.5.5 (read 0x142181160): compact count of (compact key, compact value) pairs - the fork's pair
+        // stream is format-identical - then the gate section, present because IntFour's definition gate
+        // ([[comp+0x158]+0x20]) is 1 (live-verified): u8, empty name string, three skipped string slots and a zero
+        // sub-map count, six zero bytes in all. The public tail is u32 + u8 + u8 (the old build's second u32 is gone).
+        // Keys are the client's stat ids (Stats.dat row + 1).
+        w.Stats(Stats).U8(0).U8(0).U8(0).U8(0).U8(0).U8(0).U32(0).U8(0).U8(0);
         // comp3 (0x141e114d0): u16 count of entries (u16, u8, 0x141e06bb0 record).
         w.U16(0);
         // Life (0x141e6c2f0): life, mana and energy shield pools (0x141e6be70), then a flags byte (0x141e6c270).
