@@ -29,11 +29,14 @@ public sealed record EmptyMessage(ushort MessageId) : ILoginMessage
     public void WriteFields(LoginWriter w) { }
 }
 
-/// <summary>One u16 (class 0x1435bf7e8, 0x141f92870/0x141f928d0): S→C 0x0b, 0x0d, 0x0f, 0x17 (disconnect reason), 0x1e, 0x44.</summary>
-public sealed record U16Message(ushort MessageId, ushort Value) : ILoginMessage
+/// <summary>A u16 followed by a u32 (0.5.5 client class vtable 0x143509F18, read fn 0x14214e460,
+/// write fn 0x14214e3e0: u16 at +0x14 read first, then u32 at +0x10): S→C 0x0b, 0x0d, 0x0f,
+/// 0x17 (disconnect reason), 0x1e, 0x44. An earlier u16-only model desynced the client on the
+/// first delete-character result (0x0d), live 2026-11-04.</summary>
+public sealed record U16Message(ushort MessageId, ushort Value, uint Value32 = 0) : ILoginMessage
 {
-    public void WriteFields(LoginWriter w) => w.U16(Value);
-    internal static U16Message Read(ushort id, ref LoginReader r) => new(id, r.U16());
+    public void WriteFields(LoginWriter w) => w.U16(Value).U32(Value32);
+    internal static U16Message Read(ushort id, ref LoginReader r) => new(id, r.U16(), r.U32());
 }
 
 /// <summary>One u32 (class 0x14316c420, 0x140912ff0/0x140913050): S→C 0x1f, 0x20. Also C→S 0x46 (sender 0x140d14690).</summary>

@@ -164,7 +164,7 @@ public sealed class LoginServerSession(AccountService accounts)
         return (byte)Math.Min(best, 255);
     }
 
-    /// <summary>C→S 0x0c: delete a character; answered with S→C 0x0d (u16 result).</summary>
+    /// <summary>C→S 0x0c: delete a character; answered with S→C 0x0d (u16 result + u32 0).</summary>
     public const ushort DeleteCharacterId = 0x0c, DeleteCharacterResultId = 0x0d;
 
     /// <summary>BackendErrors row 15 + 1 ("CharacterDoesNotExist"); the delete screen shows any non-zero code's text.</summary>
