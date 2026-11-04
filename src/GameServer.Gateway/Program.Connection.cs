@@ -181,11 +181,13 @@ partial class Program
                 await Send(remote, stream, ciphers, InstanceProtocol.Identity((ushort)instanceId, ""),
                     $"0x0028 instance identity (key {instanceId})");
                 await Send(remote, stream, ciphers, area.Encode(), $"0x001e {area}; ascendancy family {conn.MainAscendancy.Selection?.Family}");
-                // 0.5.5: the empty content/state application (0x23) is DISABLED for now: in the
-                // 2026-11-04 16:16 live session it did fire the world activation (facet callback) for
-                // the first time ever, but the client then crashed during area generation. Its value-0
-                // fan-out into the world aggregate's content slots is the prime suspect; the correct
-                // value/records must be reversed before it is sent again.
+                // 0.5.5: the content/state application (0x23) follows the area. Evening4 RE: its handler
+                // calls the world aggregate's main-vtable slot +0x1f0, which activates the world; the
+                // compact-int value is a plain field whose known consumer clamps the render resolution
+                // scale by value/1000. Content() sends the neutral value 1000 (the value-0 form fired
+                // the activation in the 2026-11-04 16:16 session but crashed the client during area
+                // generation, consistent with the scale being clamped to 0).
+                await Send(remote, stream, ciphers, InstanceProtocol.Content(), "0x0023 content/state (value 1000)");
                 if (level != resolved.Level)
                 {
                     // The saved experience is the character's level: Auth's (the ticket's) was not updated at the last level-up.

@@ -9,10 +9,10 @@ public class InstanceProtocolTests
 {
 
     [Fact]
-    public void Identity_and_empty_content_match_the_0x5_5_minimal_forms()
+    public void Identity_and_content_match_the_0x5_5_forms()
     {
         Assert.Equal("00280000010000", Convert.ToHexString(InstanceProtocol.Identity(1, "")));
-        Assert.Equal("00230000000000", Convert.ToHexString(InstanceProtocol.ContentEmpty()));
+        Assert.Equal("00230083E8000000", Convert.ToHexString(InstanceProtocol.Content()));
     }
     // The first bytes a real 0.5.5 client sent to the instance server after 0x14 (ticket 0x48ce8271), live capture 2026-11-04.
     private static readonly byte[] RealOpening = Convert.FromHexString("000F48CE8271000E995DF4B1DB347FED6AEA795B7F0000010000000001");
