@@ -44,11 +44,11 @@ public class InstanceMovementTests
         Assert.Empty(InstanceProtocol.SplitClientMessages(location[..cut], out var partial, out var unknown));
         Assert.Equal(location[..cut], partial);
         Assert.Empty(unknown);
-        byte[] remainder = [.. partial, .. location[cut..], .. Convert.FromHexString("0191000010000105001B00")];
+        byte[] remainder = [.. partial, .. location[cut..], .. Convert.FromHexString("0191000010000105001C00")];
         var messages = InstanceProtocol.SplitClientMessages(remainder, out partial, out unknown);
         Assert.Equal(new ushort[] { 0x190, 0x191 }, messages.Select(m => m.Id));
         Assert.Equal(location, messages[0].Bytes);
-        Assert.Equal("001B00", Convert.ToHexString(partial));
+        Assert.Equal("001C00", Convert.ToHexString(partial));
         Assert.Empty(unknown);
     }
 
@@ -94,10 +94,10 @@ public class InstanceMovementTests
     {
         // Captured live 2026-10-18 with Network Mode "auto" (lockstep on localhost): one click sent start, update, stop.
         // Each is followed here by a tick, which must still be framed.
-        byte[] chunk = Convert.FromHexString("018E00000029FFFFFFEF2909040200" + "001B0046997F00" + "019200000010FFFFFFF2" +
-            "001B0046997F00" + "0195" + "001B0046997F00");
+        byte[] chunk = Convert.FromHexString("018E00000029FFFFFFEF2909040200" + "001C0046997F00" + "019200000010FFFFFFF2" +
+            "001C0046997F00" + "0195" + "001C0046997F00");
         var msgs = InstanceProtocol.SplitClientMessages(chunk, out byte[] partial, out byte[] unknown);
-        Assert.Equal(new ushort[] { 0x018e, 0x001b, 0x0192, 0x001b, 0x0195, 0x001b }, msgs.Select(m => m.Id));
+        Assert.Equal(new ushort[] { 0x018e, 0x001c, 0x0192, 0x001c, 0x0195, 0x001c }, msgs.Select(m => m.Id));
         Assert.Equal(new[] { 15, 7, 10, 7, 2, 7 }, msgs.Select(m => m.Bytes.Length));
         Assert.Empty(partial);
         Assert.Empty(unknown);
@@ -112,10 +112,10 @@ public class InstanceMovementTests
     public void Splitter_frames_known_messages_and_keeps_partials()
     {
         // 0x0099, the two chat channel joins and 0x0129, then a tick, as one live chunk; then a tick cut in two.
-        byte[] chunk = Convert.FromHexString("00990000" + "01340334000100" + "01340001010100" + "0129" + "001B0005768AF5" + "001B00");
+        byte[] chunk = Convert.FromHexString("00990000" + "01340334000100" + "01340001010100" + "0129" + "001C0005768AF5" + "001B00");
         var msgs = InstanceProtocol.SplitClientMessages(chunk, out byte[] partial, out byte[] unknown);
-        Assert.Equal(new ushort[] { 0x0099, 0x0134, 0x0134, 0x0129, 0x001b }, msgs.Select(m => m.Id));
-        Assert.Equal("001B00", Convert.ToHexString(partial));
+        Assert.Equal(new ushort[] { 0x0099, 0x0134, 0x0134, 0x0129, 0x001c }, msgs.Select(m => m.Id));
+        Assert.Equal("001C00", Convert.ToHexString(partial));
         Assert.Empty(unknown);
 
         // A join cut across two reads waits for its last bytes.

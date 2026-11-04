@@ -44,7 +44,7 @@ public class InstanceFixedMessageFramingTests
         string hex, ushort id, int length)
     {
         byte[] packet = Convert.FromHexString(hex);
-        byte[] tick = Convert.FromHexString("001B00000000AA");
+        byte[] tick = Convert.FromHexString("001C00000000AA");
         const string text = "/goto 1_1_2 framing \u03a9";
         byte[] chat = new LoginWriter().U16(InstanceChat.ChatId).WStr(text).U8(0).ToArray();
         byte[][] expected = [tick, packet, chat, packet, tick];
@@ -71,7 +71,7 @@ public class InstanceFixedMessageFramingTests
     public void A_twenty_byte_capture_of_0099_two_ticks_and_01ef_contains_four_messages()
     {
         // Native transfer trace: the previous 20-byte length swallowed these following ticks and 0x01ef.
-        byte[] capture = Convert.FromHexString("00990100001B009586263F001B009262EA6C01EF");
+        byte[] capture = Convert.FromHexString("00990100001C009586263F001C009262EA6C01EF");
         Assert.Equal(20, capture.Length);
         var messages = InstanceProtocol.SplitClientMessages(capture, out var partial, out var unknown);
         Assert.Equal(new ushort[] { 0x0099, InstanceProtocol.TickId, InstanceProtocol.TickId, 0x01ef },

@@ -43,7 +43,7 @@ public class InstanceStashTests
     public void Client_stash_messages_are_framed()
     {
         // 0xc7 tab 4 of the personal stash, then 0xcc with two (tab, position) pairs, then a tick.
-        byte[] data = Convert.FromHexString("00C7000400" + "00CC0002" + "00000001" + "00010000" + "001B01020304" + "00");
+        byte[] data = Convert.FromHexString("00C7000400" + "00CC0002" + "00000001" + "00010000" + "001C01020304" + "00");
         var messages = InstanceProtocol.SplitClientMessages(data, out var partial, out var unknown);
 
         Assert.Equal([InstanceStash.RequestTabId, InstanceStash.ReorderTabsId, InstanceProtocol.TickId], messages.Select(m => m.Id));

@@ -108,7 +108,7 @@ public class InstanceProtocolTests
     public void Exit_to_character_selection_0x153_is_framed()
     {
         // Live: Esc → "Exit to Character Selection" sent 0153 alone; a tick may follow in the same chunk.
-        var messages = InstanceProtocol.SplitClientMessages(Convert.FromHexString("0153" + "001B00000000AA"), out byte[] partial, out byte[] unknown);
+        var messages = InstanceProtocol.SplitClientMessages(Convert.FromHexString("0153" + "001C00000000AA"), out byte[] partial, out byte[] unknown);
         Assert.Equal([InstanceProtocol.ExitToCharacterSelectId, InstanceProtocol.TickId], messages.Select(m => m.Id));
         Assert.Empty(partial);
         Assert.Empty(unknown);

@@ -4,7 +4,7 @@ namespace GameServer.Gateway.Tests;
 
 public class ClientInboxTests
 {
-    static readonly byte[] Tick1 = [0x00, 0x1b, 0x01, 0, 0, 0, 0], Tick2 = [0x00, 0x1b, 0x02, 0, 0, 0, 0];
+    static readonly byte[] Tick1 = [0x00, 0x1c, 0x01, 0, 0, 0, 0], Tick2 = [0x00, 0x1c, 0x02, 0, 0, 0, 0];
     static readonly byte[] Move = [0x00, 0x25, 1, 2, 3], Bind = [0x00, 0x4e, 0, 0x29, 0x09];
 
     static async Task<List<ClientInbox.Batch>> Drain(ClientInbox inbox)

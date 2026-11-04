@@ -3,7 +3,7 @@ using GameServer.Core.Protocol.Instance;
 
 /// <summary>
 /// One connection's client messages, split as they are read (issue #46). The client's "network: N ms" is the time until
-/// its oldest 0x1b tick is answered (Agents/docs/protocol/07 §1), so the read loop answers ticks at once, and every other
+/// its oldest 0x1c tick is answered (Agents/docs/protocol/07 §1), so the read loop answers ticks at once, and every other
 /// message waits here, in the order received, for the connection's one handler task. A slow handler (0x7d populating
 /// the area, an area change) no longer holds the 0x1c answers back.
 /// </summary>
@@ -45,10 +45,10 @@ sealed class ClientInbox(ConnectionPerformance? performance = null)
     public int PendingBatches => Volatile.Read(ref pending);
 
     /// <summary>
-    /// The ack index for the next 0x1c. The client keeps the send time of every 0x1b in a queue and index i drops entries
+    /// The ack index for the next 0x1d. The client keeps the send time of every 0x1c in a queue and index i drops entries
     /// 0..i. Ticks no server answered (sent while the client left the last area, or lost in unframed bytes) stay there
     /// for good, and index 0 then always pops a stale entry: the meter trailed by two tick intervals (~330 ms, live
-    /// 2026-10-19). So the first 0x1c of a connection, and the first after an unframed read, clears the queue; the
+    /// 2026-10-19). So the first 0x1d of a connection, and the first after an unframed read, clears the queue; the
     /// client then measures from its latest tick (+0xc470). The rest answer one tick each.
     /// </summary>
     public ushort NextAckIndex()

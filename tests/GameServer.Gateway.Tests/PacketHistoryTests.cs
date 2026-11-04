@@ -19,7 +19,7 @@ public class PacketHistoryTests
         Assert.Single(history.Lines(1));
 
         long before = history.Count;
-        history.Received(0x001b, [0x00, 0x1b, 1, 0, 0, 0, 0]);   // the clock messages are left out
+        history.Received(0x001c, [0x00, 0x1c, 1, 0, 0, 0, 0]);   // the clock messages are left out
         history.Sent([0x02, 0xb5]);
         Assert.Equal(before, history.Count);
 

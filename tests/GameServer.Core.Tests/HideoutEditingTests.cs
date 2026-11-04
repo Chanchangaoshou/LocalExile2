@@ -14,7 +14,7 @@ public class HideoutEditingTests
         Assert.Equal(267, move.X);
         Assert.Equal(234, move.Y);
         Assert.Equal(0, move.Rotation);
-        var messages = InstanceProtocol.SplitClientMessages([.. packet, 0, 0x1b, 0, 0, 0, 0, 0], out var partial, out var unknown);
+        var messages = InstanceProtocol.SplitClientMessages([.. packet, 0, 0x1c, 0, 0, 0, 0, 0], out var partial, out var unknown);
         Assert.Empty(partial);
         Assert.Empty(unknown);
         Assert.Equal(2, messages.Count);

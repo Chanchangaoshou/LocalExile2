@@ -10,7 +10,7 @@ public class PassiveRequestFramingTests
         // Captured Block Mastery (38921), HASH16 4500, then a normal allocation and a tick in the same TCP chunk.
         byte[] mastery = Convert.FromHexString("003598091194");
         byte[] allocate = Convert.FromHexString("00340000DFB000");
-        byte[] tick = Convert.FromHexString("001B00000000AA");
+        byte[] tick = Convert.FromHexString("001C00000000AA");
         var messages = InstanceProtocol.SplitClientMessages([.. mastery, .. allocate, .. tick], out var partial, out var unknown);
         Assert.Equal([InstanceEntities.MasteryEffectId, InstanceEntities.AllocatePassiveId, InstanceProtocol.TickId], messages.Select(m => m.Id));
         Assert.Equal(((ushort)38921, (ushort)4500), InstanceEntities.ReadMasteryEffect(messages[0].Bytes));

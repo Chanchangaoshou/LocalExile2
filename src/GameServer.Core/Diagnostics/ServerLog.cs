@@ -83,7 +83,7 @@ public sealed class TimestampedWriter(TextWriter inner, Func<DateTime>? clock = 
 
 /// <summary>
 /// The dev traces: log lines too many for every run, on with Game_TRACE=&lt;category&gt;[,…] or Game_TRACE=all.
-/// Categories: move (movement messages with QPC stamps), latency (per-phase timings), ticks (every 50th 0x1b tick),
+/// Categories: move (movement messages with QPC stamps), latency (per-phase timings), ticks (every 50th 0x1c tick),
 /// ai (monster chase moves), packets (every message in both directions, hex). The older Game_MOVE_TRACE=1 and
 /// Game_LATENCY_METRICS=1 still turn on move and latency.
 /// </summary>
