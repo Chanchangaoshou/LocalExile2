@@ -2265,3 +2265,113 @@ flags&8: U32×2 + 串处理段（0x141da6ac5 起，未定版，与建模无关�
 - **若 v16 证实 H1（def 播种预置 +0x350）且 +0x10 晚期路径不执行**：跟进两路——(a) 查 +0x10 的触发条件（何者调用它：实体 ctor 后段？激活 walk？渲染首 tick？），看网关侧缺哪一步；(b) 候选 **flags&2 index 形**：index 路径恒建模、无相等检查，但行号需解析 `[typeInfo+0x28]` 表（行距 0x2C）中 IntFour.ao 的行号——另立静态任务，**不猜行号**。
 - **若 v16 证实 +0x350 在读入时为 NULL**：§13.1 的分支推论被推翻，改查 res_lookup 内抛错被捕（hook 0x140BC8280 的异常出口）——本轮证据不支持此分支，列为备选。
 - **根本 unblocker（与模型同根）**：MeleeAttackActionClient 查行失败——另立静态任务定位查表函数（字符串 xref `MeleeAttackActionClient`），查它以何键（技能名::等级？`GrantedEffect.ActiveSkill`？记录 selector？）查何表，再定网关字段改法。在查表机制定案前，不猜字段。
+
+## 2026-11-04 evening14 — MeleeAttackActionClient lookup
+
+本轮纯静态定案（未改服务器代码）：字符串 xref + 逐函数反汇编 + 0.5.5 GGPK 原始 datc64 实查（Melee.dat / ActiveSkills.dat / SkillArtVariations.dat 由 ggpk-extract 自 `E:\poe2-local\Content.ggpk` 提取，`ggx055b/`，游戏未运行时；解码器为重建的 export055.py，行宽硬校验全部通过）。承 evening13 §13.6：根本 unblocker = 让 `MeleePlayer::1` 的客户端动作行命中。
+
+### 14.0 结论（先行）
+
+- **查表函数（已实证）**：行应用 + WARN 函数 **0x14140ea70**（无行时记 `Could not find row for MeleeAttackActionClient skill <名>::<级>`，有行时把行字段写进动作对象）→ 查表函数 **0x14140e280**。两者均由动作客户端构造包装器（0x141471cc0/0x141471d10/0x141471d50 等，尾跳进各 Impl ctor）调用，属技能构造链（ctor_tail 0x141e74740 的虚调用下游）。
+- **查哪张表（已实证）**：**`Data/Balance/Melee.dat`**（0x14140deb0 加载/取行索引缓存；内存哈希索引，查找经 0x14241c760）。WARN 串（VA 0x1431C9600）与 Melee.dat 路径串（VA 0x1431C9500）同处一串表区，各有唯一 lea xref，分别落在 0x14140eb3d 与 0x14140dec8。
+- **键（已实证形态）**：`(u32 ebx, qword P)`——P 按指针值哈希（0x1402a3240 对 `[key+8]` 处 8 字节作 FNV-1a，空指针哈希 0），即**指针身份**比较，非字符串内容比较。P = 技能对象内 `[[skill]]+0x4f` 处 shared_ptr（`{ptr, control}`，control 带 +0x38/+0x3c 引用计数持有器形态）的 ptr；ebx = SAV 变体解析（0x14244ace0 的行号换算）+ 语境对象虚表 slot 0 映射的结果，初值 `0x153`。
+- **行存在（已实证，数据）**：Melee.dat 共 213 行；`(ActiveSkill=661, __col1=1)` 恰有一行 = **行 17**。GE 行 0 `MeleePlayer` 的 `ActiveSkill=661`（ActiveSkills 行 661，Id=`player_melee`）；GEPL 行 0 = `(GrantedEffect 0, Level 1)`；GESS 行 0 的 Id=`MeleePlayer`。数据链完整，缺的只是运行时 key 的两个分量未被观测到。
+- **网关字段改法：静态无法给出唯一修正（见 §14.6）**。记录已供给正确的 GEPL/GESSPL 行号；ebx 与 P 的运行时值、以及二者由哪一网关字段决定，均未被静态观测到——**不猜**，缺的一环与 v17 钩子见 §14.7。
+- **ActiveSkill vs MeleeAttackActionClient（已实证，§14.4）**：不是同一概念的不同名。`ActiveSkill` 是 GrantedEffects 行指向 ActiveSkills 定义的外键（行 0 → `player_melee`）；`MeleeAttackActionClient` 是 C++ 动作客户端类名（ActionType 28 的 melee 动作实现），WARN 文本把它硬编码为类名。查表用 Melee.dat 行（ActiveSkill + 变体）把两者桥接。
+
+### 14.1 字符串与函数识别（已实证）
+
+UTF-16LE 串表区（.rdata，VA = raw + 0x140001200）：`Data/Balance/Melee.dat` @ 0x1431C9500、`Could not find row for MeleeAttackActionClient skill ` @ 0x1431C9600、`MeleeAttackActionClientImpl::ContactAttack on_hit_bone …` @ 0x1431C96D0/0x1431C9780。ASCII 形态三串在 exe 内零命中——日志串一律 UTF-16。
+
+lea rip-relative xref（仅 48/49 8D 形扫描）：
+| 串 | xref 点 |
+|---|---|
+| Melee.dat 路径 | 0x14140dec8（0x14140deb0 内） |
+| WARN 格式串 | 0x14140eb3d（0x14140ea70 内） |
+| ContactAttack 串 A | 0x141410a52、0x141572507 |
+| ContactAttack 串 B | 0x141410b7f、0x141572635 |
+| 裸 `MeleeAttackActionClient` 串 @ 0x1431C962E | 无 lea xref（疑经虚表/类型注册到达，非查表路径必需，未深究） |
+
+函数：
+- **0x14140deb0**：Melee.dat 行索引取用器（rcx=out holder；加载表 → `0x142195170`（串哈希，edx=0x2c）→ 16 桶散列定位 → `0x1401600c0` map 操作 → 返回 holder，`[holder]=行指针`）。姊妹函数 0x14140e0b0 为 SkillArtVariations.dat 取用器（edx=0x46，串长 0x23）。
+- **0x14140ea70**：行应用函数。签名 `(rcx=A 语境, rdx=B 技能对象, r8=C 目标动作对象)`：`rdx_key = [[B]]+0x4f`，调 0x14140e280(out, rdx_key, A)；有行则把行字段写进 C：`+0x24/+0x34/+0x44/+0x54/+0x64/+0x74/+0x84`（步长 0x10，7 个字段，经 0x141ed8680）、`+0x14`（经 0x141ed6250）、`[+0x95]`（经 0x141ed8430）；无行则记 WARN（名取自 `[[B]]` 链的字符串 + `::` + 级，级取自 `[B]` 链 dword）。
+- **0x14140e280**：查表函数。签名 `(rcx=out, rdx=r15 key 对象指针, r8=r14 语境)`，分两阶段（§14.2）。
+- **0x14241c760**：哈希 map 查找。`(rcx=map, rdx=out, r8=key)`：`0x142413eb0(key)` 哈希 → Fibonacci 散列（乘 0x9e3779b97f4a7c15，桶位数 `[map+0x36]`) → 桶内 `[hash]` 比对 → 条目步长 0x20。未命中返回 map 尾（调用方判空行）。
+- **0x142413eb0**：key 哈希。`rbx=key`；`rdx=key+8` 调 0x1402a3240（对 `[rdx]` 处 8 字节 FNV-1a）；再把 `[key+0..4)` 4 字节 FNV-1a 混入。**故 key = `{u32 @+0, qword @+8}`**，qword 按值哈希。
+- **0x1402a3240**：8 字节值哈希（FNV-1a，basis 0xcbf29ce484222325，prime 0x100000001b3；`[rdx]==0` → 0）。不读字符串内容——证实 qword 分量是指针身份。
+- **0x14244ace0**：指针→行号换算。`[rcx]==0 → 0x6a92`；否则 `(ptr - [table+0x28] 之首)/步长 + 1`（倒数乘法 0x4d4873ecade304d5，sar 5，inc）。即 SAV 行内某指针字段的 1-based 行号。
+
+### 14.2 键的构造（已实证，0x14140e280 分阶段）
+
+```
+fn(out, r15=keyobj, r14=ctx):
+  ebx = 0x153
+  # 阶段 1：SkillArtVariations 查询（0x1423d86e0，key=r15）
+  sav_range = query(SAV, r15)
+  if sav_range 非空:
+      cand = 0x1405cd450(sav_range)          # 首候选行对象
+      if [cand] 且 [[cand]+0x10c] 非空:
+          ebx = 0x14244ace0([cand]+0x10c)    # SAV 行内指针字段的行号
+  ebx = [r14 vtable slot 0](r14, edx=ebx)    # 语境映射，0x14140e3c4–0x14140e3d2
+  # 阶段 2：Melee.dat 查询（[r15] 非空时）
+  melee = 0x14140deb0()
+  key = { u32: ebx, qword: [r15], 持有器: [r15+8] }   # 栈上拼装，r8=&key
+  row = 0x14241c760(melee_index, out, &key)
+  out = (row == melee_end) ? {0,0} : {[row+0x18], melee_holder}
+```
+
+- **P 分量**：`[r15]` 与 `[r15+8]` 构成 shared_ptr（`[r15+8]` 对象带 +0x38/+0x3c 引用计数，与全客户端 holder 形态一致）。r15 = WARN 函数算出的 `[[B]]+0x4f`。P 的身份（应为 ActiveSkills 行 661 的内存行对象指针）**静态未证实**——只证实了它是指针身份比较。
+- **ebx 分量**：初值 0x153（339；SAV 行 339 = `knockback_wave`，与 MeleePlayer 无可见关联——初值语义未定）；SAV 命中时被行号换算覆盖；再经语境虚调用映射。**最终 ebx 值静态未知**。Melee 行 17 的 `__col1=1`，故命中要求最终 ebx=1（若 ebx 即 __col1——键的 u32 分量与 __col1 的对应关系为强推断，见 §14.6）。
+- **阶段 1 的 SAV 侧（已实证，数据）**：SAV 行 `default_ranged`（行 5）的 `ActiveSkill` 数组含 661——阶段 1 的查询以同一 key 对象命中它是数据自洽的；但该行 `Variants=[]`，其 `[+0x10c]` 指针字段内容与换算结果静态未读。
+
+### 14.3 数据实查（已实证，0.5.5 datc64 解码，行宽校验通过）
+
+| 表 | 行数 | 行宽 | 关键行 |
+|---|---|---|---|
+| Melee.dat | 213 | 205 B | 行 17：`ActiveSkill=661, __col1=1`，MeleeTrail3/4=213、Trail5=206、Trail6=218，其余 trail 空 |
+| ActiveSkills.dat | 1147 | 338 B | 行 40：Id=`melee`；行 661：Id=`player_melee`，`DisplayedName=Default Attack`，ActionType=28，GrantedEffect="" |
+| SkillArtVariations.dat | 737 | 284 B | 行 5 `default_ranged`：ActiveSkill 数组含 661；无 Id 含 `Melee` 的行 |
+| GrantedEffects（staging） | 8349 | — | 行 0：Id=`MeleePlayer`，`ActiveSkill=661`，`StatSet=0`，AdditionalStatSets 空 |
+| GrantedEffectsPerLevel（staging） | 34300 | — | 行 0：`GrantedEffect=0, Level=1, Cooldown=0` |
+| GrantedEffectStatSets（staging） | 8283 | — | 行 0：Id=`MeleePlayer` |
+
+- Melee.dat 的 `__col1` 分布：AS=40（`melee`）17 行（0–14、100、200）；AS=661（`player_melee`）仅 1 行（__col1=1）；其余多为单行。**`(661, 1)` 唯一**。
+- Melee.dat validFor=2 schema 列序：`ActiveSkill(foreignrow) / __col1(i32) / MiscAnimated / MeleeTrail1–7 / bool / SurgeEffect_EPKFile / 2×string / MeleeTrail8–9`，列宽和 205 = 实际行宽 ✓。
+- WARN 消息的 `::1` = 技能等级（GEPL 行 0 的 Level=1），与 key 的 u32 分量**不是同一字段**——消息只证明 GE 解析与等级解析成功，不证明 key 命中。
+
+### 14.4 ActiveSkill 列与 MeleeAttackActionClient 的关系（任务项 4，已实证）
+
+- GE 行 0 的 `ActiveSkill` 列 = 外键 661 → ActiveSkills 行 661，Id=`player_melee`。它是**技能定义**（Default Attack，ActionType 28）。
+- `MeleeAttackActionClient` / `MeleeAttackActionClientImpl` 是**客户端 C++ 类名**（动作的客户端实现；ContactAttack 方法串为证）。WARN 文本把类名硬编码进格式串，技能名部分取 GE Id。
+- 两者经 Melee.dat 桥接：`MeleeAttackActionClient` 的行应用函数按 `(ActiveSkill 定义, 变体)` 查 Melee.dat 行，再把行的 trail/字段写进动作对象。**网关侧不存在名为 MeleeAttackActionClient 的字段**；候选控制面只有记录字段（§14.6）。
+
+### 14.5 selector 字节的角色（已实证部分，记录读程 0x142189c40 块）
+
+记录读程（0x142188D50）在尾段/步 11 之后有一段定义解析块（0x142189c40–0x142189d31）：以 `"Actor"` 为键查某注册表得定义对象 r8，再按 r8 的字段取两 dword 写 `[rbp+0x20]/[rbp+0x24]`：
+- 某标志 `[rax+0x20]==0` → 取 `[r8+0x2c8]/[r8+0x2cc]`；
+- 否则看 selector（`[rbp+0x338]`，即流内 selector 字节）：`dl = selector & 0x3f`，`ecx = selector >> 6`；ecx==1 或 2 → 取 `[r8+0x2c8+40*dl]` 系；其余（含 selector=0）→ 取 `[r8+0x924]/[r8+0x928]`。
+- **selector=0 与 selector=1 在此块行为相同**（同走 `[r8+0x924]` 支）——改 selector 0→1 不影响此块。`[rbp+0x20]/[rbp+0x24]` 的下游用途（是否进入技能对象、是否影响 Melee key）**静态未追踪到**，不作断言。
+
+### 14.6 网关侧改法评估：无唯一修正，缺失证据（分级）
+
+网关现发记录：`Id=0x0102、selector=0、GEPL 0、GESSPL 0、CooldownMs=0、weaponStats`。静态已排除/已证实：
+- GEPL/GESSPL 行号正确（数据链 GE 0 → AS 661 → Melee 行 17 完整）——**行号不是缺口**。
+- selector 0/1 在记录读程定义块内无差别——**selector 不是已证实的缺口**（其在动作构造中的其它用途未排除）。
+- 缺失的一环（运行时观测，未静态可得）：
+  1. **ebx 的终值**：SAV 换算与语境虚调用之后是多少？是否为 1？若不是，SAV 查询/虚调用的哪一步走偏？
+  2. **P 的身份**：`[[skill]]+0x4f` 的 shared_ptr 是否指向 ActiveSkills 行 661 的内存对象？若不是，指向何对象（虚表定身份）？
+  3. 二者与网关字段的因果：P 由技能对象的 ActiveSkill 引用填充——该引用由 GE 行解析（数据侧已正确）还是由某记录字段/后续步骤填充？静态未见填充点。
+- 故**不给出字段改法**；一次 v17 会话同时观测 ebx 与 P 即可定案（§14.7）。在此之前不改服务器代码。
+
+### 14.7 v17 探针钩子清单（一次会话，读数只读）
+
+全部只盯玩家实体（id 0x1000 的 CreateObject 之后）；探针 runner 重读 JS，客户端须重开。保留 v16 全部钩子（模型线并行）。
+
+1. **0x14140e280 entry**：log rdx（r15）、`[r15]`（P）、`[r15+8]`（control）、`[P]`（首 qword，虚表/行标记）、r8（r14）、`[r14]`（语境虚表）。
+2. **0x14140e441（map-find 调用点，onEnter）**：log r8（key 指针）、`[r8]`（ebx，u32）、`[r8+8]`（P）；**0x14140e446（调用返回后）**：log rax 与 `[rax]`（命中行指针或 map 尾）。
+3. **0x14140e3cf（虚调用点，onEnter）**：log edx（ebx 入）、`[r14]`；**0x14140e3d2**：log eax（ebx 出）——定虚调用是否改写 ebx。
+4. **0x14244ace0 entry/leave**：log rcx、`[rcx]`、eax 返回值——定 SAV 换算的 ebx 候选。
+5. **0x14140ea70 entry**：沿 arg2 链 log：`[rdx]`、`[[rdx]]`、名串（`[[[rdx]]]` 缓冲 + `[ [rdx]+0x10 ]` 长度域）、`[[rdx]]+0x4f` 处 shared_ptr（P + control + `[P]`）。
+6. **0x1423d86e0 leave**：log 返回的 range 空/非空——定阶段 1 是否命中 SAV 行。
+
+判读顺序：#2 定运行时 key（ebx，P）→ #1/#5 定 P 身份（是否为 AS 661 行对象）→ #3/#4 定 ebx 来源（SAV 换算 vs 虚调用 vs 初值 0x153）→ 若 ebx≠1，查虚调用 this 的类型与 slot 0 语义（另立静态任务）；若 P 不对，查技能对象 ActiveSkill 引用的填充点（记录读程定义块下游或构造后步骤）。
