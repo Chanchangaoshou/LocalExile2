@@ -461,3 +461,36 @@ Interceptor.attach(at('0x140BC8280'), { onLeave(ret) { send({ ev: 'res_lookup', 
 Interceptor.attach(at('0x141D2C750'), { onEnter(args) { send({ ev: 'ao_ctor', rcx: this.context.rcx.toString(), rdx: this.context.rdx.toString() }); } });
 Interceptor.attach(at('0x1421232bf'), { onEnter(args) { send({ ev: 'walk_after_23', rcx: this.context.rcx.toString() }); } });
 send({ ev: 'v15_armed' });
+
+// ---- v16: model-attach + throw-module localization (evening13) ----
+function derefChain(p, n) {
+  let cur = p, out = [];
+  try { for (let i = 0; i < n; i++) { cur = cur.readPointer(); out.push(cur.toString()); } } catch (e) { out.push('ERR'); }
+  return out;
+}
+Interceptor.attach(at('0x141DA66C0'), {
+  onEnter(args) {
+    const rcx = this.context.rcx;
+    let s350 = 'ERR';
+    try { const h = rcx.add(0x350).readPointer(); const s = h.readPointer(); s350 = derefChain(rcx.add(0x350), 2).join('>') + ' str=' + (s.readUtf16String ? (s.readUtf16String(80) || '') : ''); } catch (e) {}
+    send({ ev: 'anim_entry', p350: s350, def168: rd(rcx, 0x168), p190: rd(rcx, 0x190), p198: rd(rcx, 0x198) });
+  }
+});
+Interceptor.attach(at('0x140189bc0'), {
+  onEnter(args) { send({ ev: 'p350_write', rcx: this.context.rcx.toString(), ret: this.returnAddress.toString() }); }
+});
+Interceptor.attach(at('0x141da2c30'), {
+  onEnter(args) { send({ ev: 'refresh10', rcx: this.context.rcx.toString(), rdx: this.context.rdx.toString() }); },
+  onLeave(ret) { send({ ev: 'refresh10_done', ret: ret.toString() }); }
+});
+Interceptor.attach(at('0x142c14380'), {
+  onEnter(args) {
+    const mods = [];
+    try { Process.enumerateModules().forEach(m => mods.push(m.name + '@' + m.base.toString())); } catch (e) {}
+    send({ ev: 'throw_ctx', bt: Thread.backtrace(this.context, Backtracer.ACCURATE).slice(0, 8).map(a => a.toString()), mods: mods });
+  }
+});
+Interceptor.attach(at('0x141DA37E0'), {
+  onEnter(args) { send({ ev: 'attach_gate', owner8c: rd(this.context.rcx, 0x8c) }); }
+});
+send({ ev: 'v16_armed' });
