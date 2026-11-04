@@ -1881,3 +1881,73 @@ bbbbbb 实测 605) + 0 + 2 + 125 + 75 + 51 + 2 + 40 + 1 = **922 B**
 5. Animated bit2/bit3 段格式（玩家写 flags=1 不触发）。
 6. blob flags 字节 bit1（登记）与 0x1C6 补发的二选一（§10(2)）。
 7. 本地玩家认领的实测（§10(3) 钩子清单）。
+
+## 2026-11-04 evening10 — Actor silent death（离线复现定案）
+
+承 18:51 真机会话（bbbbbb，blob v3 1189 B）：前九个组件游标全对齐，idx9 Actor 读开始后无 throw、无异常事件、无 fnC 返回，客户端静默消失。本轮离线重构实际字节 + 模拟读程 + 0.5.5 datc64 原始数据定案。
+
+### 10.1 会话输入重构（已实证：网关代码 + 存档 DB + 部署目录）
+
+- bbbbbb 存档（PC saves.db 直读）：ClassId=1 女巫、Level=1、Standard 联盟、G1_1；世界存档 Inventories["11"] = 3 件药剂；StartWeapon Type 926725699（2 孔，Gem=null）；SkillBar/Passives/QuestFlags 均 null → **GemSkills 为空、Souls 为空（VaalSouls.Read() 对全 null 返回空）**。
+- `PlayerForCreation`（Program.Player.cs:838）：Skills = PlayerDefaults(weaponStats) + GemSkills = **恰好 1 条** GrantedSkill：Id=0x0102（SkillCatalog.FirstSkillId）、GEPL=**4474**、GESSPL=**4430**、Stats=weaponStats、CooldownMs=0、VaalResourcesEnabled=false、Supports=[]、ExtraStatSets=[]。数据源是**部署目录的旧代表**（网关 18:21 启动日志 "23346 stat(s), 40355 mod(s)" 为旧代计数）：旧表里 GrantedEffects 468='PlayerMelee'、StatSet1=476、StatSet2=[] → GEPL(468,L1)=4474、GESSPL(476,L1)=4430，与网关无表回退常量 (4474,4430) 恰好同值。
+- Stats 快照 186 对（CharacterPlayerStatsSnapshot：面板∪物品∪宝石）；weaponStats（记录内 Stats 表）= WeaponStats() 计算列表。
+
+### 10.2 Actor 字节总账（已实证：写侧代码逐字节推算；与 trace 游标互证）
+
+**先纠一处旧账：Actor+tasks 不是 140 B。** blob 1189（网关日志硬数）− Actor 起点 0x431=1073（trace 游标硬数）= **116 B**；组件和 19+605+0+2+125+73+213+0+34=1071，+2（flags+base）=1073 ✓。115 B Actor 本体 + 1 B tasks：
+
+| 段 | 字节 | 内容 |
+|---|---|---|
+| seg1 三槽 | 18 | 每槽 U8(0)+U8(0)+WStr32("")=6 |
+| F2nd | 1 | 0 |
+| 技能表 | 82 | n=U8(1) + 记录 75 + m=U8(0) 灵魂 + k=U8(0) 字节表 + g=U32(0) 冷却组 |
+| seg3 | 6 | F0,F1,F2=0 + U16(0) + U8(0) |
+| seg4 | 8 | 4×U8(0) 旗标（无 U32 跟随）+ U32(0) |
+| seg5 | 0 | F0=0 不读；内部生命门控关闭（§10.4） |
+| seg6/seg7 | 0 | F1=F2=0 不读 |
+
+记录 75 B = 定长 30（id U32 + selector U8 + 复合引用 5 + 嵌套引用 5 + flags U8 + supportCount U8 + U32×3 + U8）+ Stats 表 45（weaponStats 对流）。
+
+### 10.3 引用解析器定版（已实证：0x142684090 / 0x142683DB0 全反汇编）
+
+- 复合引用解析器 0x142684090：读 U8 tag + U32 row → 按 **0x74 步长**查 GEPL 表（越界→空指针不抛错）；再调嵌套解析器读主 GESSPL 引用；**然后按行数据驱动追加读 K 个嵌套引用**，K = 解析出的 GrantedEffects 行 **+0xB8 的数组长度**（AdditionalStatSets 列，schema foreignrow-array @文件偏移 0xB8，DatFile 约定 len=u32@[off]）。
+- 嵌套解析器 0x142683DB0：U8 a（≠0 再读 U8 b）+ U32 row → 按 **0xB9 步长**查 GESSPL 表；无其他流读取。对我们的 (a=0, row=4430) 恰消费 5 B。
+- 记录读程 0x142188D50 的全部越界出口（0x14218a790 族）都是「构造错误对象 + 0x142c14380 抛掷」——**真机会话里一个都没触发**，即读程从未越过 span。
+
+### 10.4 段5 生命门控（已实证：0x142147300 反汇编 + 网关代码）
+
+主读程 0x142147741–0x14214776e：rdx = 组件数组[ 描述符+0xE0 的索引 ]（兄弟组件，.ot 顺序下为 Life，强推断）；`cmp dword [rdx+0x1E0], 0; jg 跳过`——**兄弟 +0x1E0 ≤ 0 才多读 7 B（U16+U8+U32）**。Life 对象 +0x1E0 = 第一 A 子对象（+0x1a8）内 +0x38 处 = **A1 首个 U32 = 我们 Pool(Life).current = conn.PlayerLife = 31**（Program.LeagueModes.cs:78 初始化为满池；创建日志 "life 31"）。31 > 0 → **门关闭，我们的 seg5 零字节写法正确**，(b) 假设排除。
+
+### 10.5 第一个不一致点（已实证：0.5.5 datc64 原始数据，本轮新抽取）
+
+流格式层面整条记录**干净对齐**（K 实测=0：见下）——不一致在**行号语义**：网关按旧代编号发出的两个行号，在 0.5.5 客户端里指向完全不同的行：
+
+| 引用 | 网关意图（旧表） | 0.5.5 实际 |
+|---|---|---|
+| GEPL 4474 | PlayerMelee L1 | GrantedEffect=**119**、Level=**12**；GE[119].Id = **'SupportMetaTotemSpellTotemPlayer'**（辅助/图腾系效果）；其 AdditionalStatSets len = **0**（故 K=0、无追加读） |
+| GESSPL 4430 | PlayerMelee StatSet1(476) L1 | **StatSet=114、Level=40**（另一效果的 40 级属性集行） |
+
+客户端据此构造技能：**效果=12 级图腾辅助、属性集=StatSet 114 的 40 级行**——跨代拼凑的弗兰肯技能。记录读程的流读取部分（id/selector/两引用/flags/0 辅助/U32×3/U8/主属性表）全部按我们的字节正常消费；附加集 K=0、尾段计数读到的字节是我们的 m=0，同样无事。
+
+### 10.6 0.5.5 真值（已实证）
+
+0.5.5 中**不存在 Id='PlayerMelee' 的效果**。默认攻击 = **GrantedEffects 第 0 行 'MeleePlayer'**（武器变体行 1–21），其 StatSet1=0、AdditionalStatSets len=0、**GEPL(MeleePlayer, L1) = 第 0 行、GESSPL(StatSet 0, L1) = 第 0 行**。正确行号是 (0, 0)。
+
+### 10.7 跑飞机制（强推断；证据链如下）
+
+- 排除项（已实证）：span 越界必抛掷（§10.3）而现场无 throw_call/异常；段5 门关闭（§10.4）；K=0 无追加引用（§10.5）；灵魂/字节表/冷却组计数全 0（§10.2）；前九组件全对齐。
+- 读程内唯一尚未走完的数据相关工作 = 记录读程后半的**技能对象构造**（0x142189c80–0x14218a700 大量对象图调用与虚调用链，含辅助 0x14218ca30）：它只吃**解析出的行**、不吃流。毒行构造出的技能（meta 图腾辅助效果 × 无关 40 级属性集 × 12 级）使构造在效果授予图上进入循环/深递归（meta 辅助的效果授予链本就成环），栈耗尽或图遍历不终止——与现象吻合：无 C++ 抛掷、无可投递异常、fn C 永不返回、进程被用户/系统终结（网关 15 s 后才见 socket 断）。
+- 待验点：具体打转的辅助函数（0x14218ca30 与记录尾虚调用链二选一）需探针 v14 在 0x142188D50/0x14218A9D0/0x142147300 返回点 + 游戏线程心跳上定位；本轮静态证据只能定到「构造阶段」粒度。
+
+### 10.8 修正写法（字段级；布局不变，只换数据来源）
+
+1. **Actor 段布局一字不改**（115 B 结构经模拟验证与读程一致）。
+2. 默认攻击记录的两个行号改为 0.5.5 真值：**GEPL row U32 = 0、GESSPL row U32 = 0**（'MeleePlayer' L1）。记录其余字段（id 0x0102、selector 0、flags 0、无辅助、CooldownMs 0、weaponStats 表）保持——CooldownMs 真值未单独核读 GEPL[0] 的冷却列（默认攻击无冷却，推断 0 无风险）；id 0x0102 的编号空间语义待验（记录读程只把它存进记录对象、不查表，低风险）。
+3. **系统性修复（根治）**：把已 staged 的 0.5.5 重导出表（GrantedEffects / GrantedEffectsPerLevel / GrantedEffectStatSetsPerLevel / GrantedEffectStatSets）部署进 `D:\LocalExile2\data\tables`，使 SkillCatalog.Find / WithExtraSets 对**全部**授予（默认攻击+宝石技能）算出 0.5.5 真行号；同时把 SkillCatalog 无表回退常量 (4474, 4430) 改为 (0, 0)——回退常量本身就是毒源。部署前注意 gateway 按什么键把客户端技能 id 映射到 GE 行（id↔行映射是实现侧唯一未定项，须在部署时核对）。
+4. **Life 池↔槽**：本轮无新证据推翻 evening9 现状——A1=Life 由门控语义旁证（§10.4 比较的正是 A1 首 U32），fork 现写法（A1 Life / A2 Mana / A3 ES / A4 0）保持；A2–A4 的确切对应仍待 HUD 判别实验（101/202/303/404）定案，不在本轮修正范围。
+
+### 10.9 残留未知
+
+- 技能表读程 0x14218A9D0 的 n/m/k/g 逐字节格式未独立复核（本轮沿用 evening9 推导；尾部全零使多数误序无害，且记录构造先于表尾消费出事）。
+- 跑飞点精确到函数级需探针 v14（见 §10.7）。
+- GEPL[0] 冷却列、记录 id 编号空间：低风险待验（§10.8.2）。
