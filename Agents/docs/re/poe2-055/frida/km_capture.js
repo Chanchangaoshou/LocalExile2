@@ -539,10 +539,12 @@ okAttach('mapping', '0x1426aca90', {
     let tab = 'ERR';
     try {
       const b = t.add(0xf8).readPointer(), e = t.add(0x100).readPointer();
-      const n = Math.min(64, Math.max(0, Math.floor(e.sub(b).toNumber() / 8)));
+      const diff = e.sub(b);
+      const dn = (typeof diff === 'number') ? diff : diff.toNumber();
+      const n = Math.min(64, Math.max(0, Math.floor(dn / 8)));
       const parts = [];
-      for (let i = 0; i < n; i++) { const kv = b.add(i * 8); parts.push(kv.readU32().toString() + ':' + kv.add(4).readU32().toString()); }
-      tab = 'n=' + n + ' [' + parts.join(',') + ']';
+      for (let i = 0; i < n; i++) { try { const kv = b.add(i * 8); parts.push(kv.readU32().toString() + ':' + kv.add(4).readU32().toString()); } catch (e2) { parts.push('?'); } }
+      tab = 'b=' + b.toString() + ' e=' + e.toString() + ' n=' + n + ' [' + parts.join(',') + ']';
     } catch (e) { tab = 'ERR:' + String(e).slice(0, 40); }
     send({ ev: 'mapping_in', arg0: t.toString(), fb: rd18(t, 0xe8), tab: tab });
     this.t = t;
