@@ -33,11 +33,23 @@ the tail call consumes. Same signature as the 16:16 value-0 crash,
 so **the value was never the crash cause**; the blocker is now this
 one null field. evening6 RE is dissecting the tail call, the field's
 writers, and whether post-generation timing (S2) populates it.
-No user test is needed until that lands.
+## S2 deployed (2026-11-04 17:39, commit `83b725d`, Core 424/424)
+
+Evening6: the callback calls 0x142ac16b0 on [agg+0x1270] with NO null
+check; the field's only non-ctor writer is the ensure inside the
+client's local commit method 0x14167b3f0 — no server message reaches
+it, and its natural timing is around generation completion. So the
+gateway burst is back to `0x11 → 0x1e` only, and the 0x9a handler now
+sends `0x2f7` then `0x23` (value 1000). Probe v10 watches agg_commit /
+agg_ensure / agg_reload_1270: if commit+ensure fire before the reload
+reads a non-null +0x1270, the timing theory is proven either way in
+one session. `Identity()` was renamed `DisconnectWithReason` in the
+same commit.
 
 ## Waiting on the NEXT user login (called when ready)
 
-1. **S2 (problem 1)** — sequence prepared per the evening6 verdict.
+1. **S2 readout** — enter with yyyyyy: in-game, or the same crash VA
+   (then the commit is driven by something later than generation).
 2. **Class fingerprint (problem 2)**: at the character-select screen,
    note which class the throwaway character **bbbbbb** displays.
    (bbbbbb was deleted by the user on 2026-11-04 14:08 and has been

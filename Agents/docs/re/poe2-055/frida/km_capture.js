@@ -323,3 +323,23 @@ Interceptor.attach(at('0x14211f920'), {
   }
 });
 send({ ev: 'v7_armed' });
+
+// ---- v10: aggregate commit / ensure / the dangerous reload (evening6) ----
+// commit method 0x14167b3f0 (main vtable +0x1e0): the client's local world
+// assembly committing area parameters into the aggregate; its tail ensure
+// 0x141681720 allocates [agg+0x1270] on first use. If these fire before the
+// activation callback's reload at 0x1416820b1, S2's timing is safe.
+Interceptor.attach(at('0x14167b3f0'), {
+  onEnter(args) { send({ ev: 'agg_commit' }); }
+});
+Interceptor.attach(at('0x141681720'), {
+  onEnter(args) { send({ ev: 'agg_ensure' }); }
+});
+Interceptor.attach(at('0x1416820b1'), {
+  onEnter(args) {
+    let v = null;
+    try { v = this.context.rbx.add(0x1270).readPointer().toString(); } catch (e) {}
+    send({ ev: 'agg_reload_1270', value: v });
+  }
+});
+send({ ev: 'v10_armed' });
