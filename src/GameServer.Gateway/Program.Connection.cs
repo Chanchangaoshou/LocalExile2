@@ -128,6 +128,7 @@ partial class Program
                 // Another connection's requests (a trade, a party invite) reach this client through its own send gate.
                 conn.Outbox = (bytes, log) => Send(remote, stream, ciphers, bytes, log);
                 conn.Commands = Commands(remote, stream, ciphers, conn);
+                CommandBridge.Register(conn);
                 HotReload.Register(conn);
                 conn.ArriveAtWaypoint = WaypointArrivals.TryRemove(ticket, out _) || HideoutCatalog.ByArea(layout.Hash) is not null;
                 conn.ArriveAt = SpotArrivals.TryRemove(ticket, out var spot) ? spot : null;
@@ -213,6 +214,7 @@ partial class Program
             left.Packets.Print(remote, "before the client closed the connection");
         if (left is not null)
         {
+            CommandBridge.Unregister(left);
             // The connection ends (a logout, an area change, a crash of the client): what waits in memory is saved now.
             try
             {

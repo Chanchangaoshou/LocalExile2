@@ -99,6 +99,7 @@ if (!started.Ok) Console.WriteLine($"[gateway] Auth did not take gateway_started
 StartMods();
 listener.Start();
 Console.WriteLine($"[gateway] listening on {bind}:{port}");
+CommandBridge.Start();
 
 using var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
