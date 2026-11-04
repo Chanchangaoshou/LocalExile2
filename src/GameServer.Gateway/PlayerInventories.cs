@@ -1013,14 +1013,24 @@ sealed class PlayerInventories
         }
         using var c = JsonDocument.Parse(File.ReadAllBytes(chars));
         using var g = JsonDocument.Parse(File.ReadAllBytes(gems));
+        if (characterRow < 0 || characterRow >= c.RootElement.GetArrayLength())
+        {
+            Console.WriteLine($"[gateway] start kit is empty: no Characters row {characterRow} in {chars}");
+            return inv;
+        }
         var row = c.RootElement[characterRow];
         void Put(byte inventory, byte x, byte y, ItemCatalog.BaseType? t)
         {
             if (t is { Supported: true }) inv.Add(inventory, x, y, ItemCatalog.Create(t));
         }
+        // The Characters indices name rows of the item tables of the same generation; a row the loaded
+        // SkillGems table does not have (the 0.5.5 Characters table against an older SkillGems export)
+        // resolves to no gem instead of crashing the connection (live 2026-11-04: StartSkillGem 3951).
         ItemCatalog.BaseType? Gem(string column) =>
-            row.GetProperty(column) is { ValueKind: JsonValueKind.Number } k
-                ? catalog.Row(g.RootElement[k.GetInt32()].GetProperty("BaseItemTypesKey").GetInt32()) : null;
+            row.GetProperty(column) is { ValueKind: JsonValueKind.Number } k && k.GetInt32() is int gemRow
+                && gemRow >= 0 && gemRow < g.RootElement.GetArrayLength()
+                && g.RootElement[gemRow].TryGetProperty("BaseItemTypesKey", out var bk) && bk.ValueKind == JsonValueKind.Number
+                ? catalog.Row(bk.GetInt32()) : null;
         // The start weapon with two linked white sockets (3.29: gems fit any colour), empty, for its gems.
         if (row.GetProperty("StartWeapons").EnumerateArray().FirstOrDefault() is { ValueKind: JsonValueKind.Number } w &&
             catalog.Row(w.GetInt32()) is { Supported: true } weapon)
