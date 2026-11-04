@@ -192,6 +192,13 @@ partial class Program
                 string identityName = conn.Account ?? conn.Character ?? "";
                 _ = identityName;
                 await Send(remote, stream, ciphers, area.Encode(), $"0x001e {area}; ascendancy family {conn.MainAscendancy.Selection?.Family}");
+                // S1 (SOLUTION-PLAN v2 section 2): the ONLY variable against the 2026-11-04 16:16
+                // crash session is the 0x23 compact-int value, 0 -> 1000. Same timing (in the
+                // connection burst, before the client's 0x9a), same empty queue, and no CreateObject
+                // is sent on this path yet - so a crash here cannot be the entity constructor or
+                // the player blob, and a clean activation pins the 16:16 crash on the value (its
+                // one known consumer clamps the render resolution scale by value/1000).
+                await Send(remote, stream, ciphers, InstanceProtocol.Content(), "0x0023 content/state S1 (value 1000)");
                 // 0.5.5: the content/state application (0x23) is NOT sent here. Sequencing per
                 // SOLUTION-PLAN-2026-11-04: S1 isolates the 0x28 identity-name fix on the pre-0x28
                 // baseline (0x11 + 0x28 + 0x1e,判据 = the 0x9a reply returns); S2 then sends 0x23 only
