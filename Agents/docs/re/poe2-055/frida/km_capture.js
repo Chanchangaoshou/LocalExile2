@@ -496,6 +496,10 @@ Interceptor.attach(at('0x141DA37E0'), {
 send({ ev: 'v16_armed' });
 
 // ---- v17: Melee.dat lookup localization (evening14) ----
+function safeAttach(tag, va, cbs) {
+  try { Interceptor.attach(at(va), cbs); }
+  catch (e) { send({ ev: 'hook_fail', tag: tag, err: String(e).slice(0, 80) }); }
+}
 function rd17(p, off) { try { return p.add(off).readPointer().toString(); } catch (e) { return 'ERR'; } }
 function regs17(c) {
   const r = { rax: c.rax, rbx: c.rbx, rcx: c.rcx, rdx: c.rdx, rsi: c.rsi, rdi: c.rdi, r8: c.r8, r9: c.r9, r14: c.r14, r15: c.r15 };
@@ -503,21 +507,21 @@ function regs17(c) {
   for (const k in r) { o[k] = r[k].toString(); o[k + '_deref'] = rd17(r[k], 0); }
   return o;
 }
-Interceptor.attach(at('0x14140e280'), { onEnter(args) { send({ ev: 'melee_lookup', regs: regs17(this.context) }); } });
-Interceptor.attach(at('0x14140e441'), { onEnter(args) { send({ ev: 'melee_find_in', ebx: (this.context.rbx.toNumber() & 0xffffffff).toString(), regs: regs17(this.context) }); } });
-Interceptor.attach(at('0x14140e446'), { onEnter(args) { send({ ev: 'melee_find_out', regs: regs17(this.context) }); } });
-Interceptor.attach(at('0x14140e3cf'), { onEnter(args) { send({ ev: 'melee_vcall_pre', ebx: (this.context.rbx.toNumber() & 0xffffffff).toString() }); } });
-Interceptor.attach(at('0x14140e3d2'), { onEnter(args) { send({ ev: 'melee_vcall_post', ebx: (this.context.rbx.toNumber() & 0xffffffff).toString() }); } });
-Interceptor.attach(at('0x14244ace0'), {
+safeAttach('melee_lookup', '0x14140e280', { onEnter(args) { send({ ev: 'melee_lookup', regs: regs17(this.context) }); } });
+safeAttach('melee_find_in', '0x14140e441', { onEnter(args) { send({ ev: 'melee_find_in', ebx: (this.context.rbx.toNumber() & 0xffffffff).toString(), regs: regs17(this.context) }); } });
+safeAttach('melee_find_out', '0x14140e446', { onEnter(args) { send({ ev: 'melee_find_out', regs: regs17(this.context) }); } });
+safeAttach('melee_vcall_pre', '0x14140e3cf', { onEnter(args) { send({ ev: 'melee_vcall_pre', ebx: (this.context.rbx.toNumber() & 0xffffffff).toString() }); } });
+safeAttach('melee_vcall_post', '0x14140e3d2', { onEnter(args) { send({ ev: 'melee_vcall_post', ebx: (this.context.rbx.toNumber() & 0xffffffff).toString() }); } });
+safeAttach('sav_conv', '0x14244ace0', {
   onEnter(args) { this.a0 = args[0].toString(); this.a1 = args[1].toString(); },
   onLeave(ret) { send({ ev: 'sav_conv', a0: this.a0, a1: this.a1, ret: ret.toString() }); }
 });
-Interceptor.attach(at('0x14140ea70'), {
+safeAttach('melee_rowapp', '0x14140ea70', {
   onEnter(args) {
     let nm = 'ERR';
     try { nm = args[1].readPointer().readUtf8String(64) || ''; } catch (e) {}
     send({ ev: 'melee_rowapp', name: nm, arg2: args[1].toString(), p4f: rd17(args[1], 0x4f) });
   }
 });
-Interceptor.attach(at('0x1423d86e0'), { onLeave(ret) { send({ ev: 'sav_range', ret: ret.toString() }); } });
+safeAttach('sav_range', '0x1423d86e0', { onLeave(ret) { send({ ev: 'sav_range', ret: ret.toString() }); } });
 send({ ev: 'v17_armed' });
