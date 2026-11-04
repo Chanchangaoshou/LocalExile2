@@ -81,6 +81,8 @@ partial class Program
                     if (n == 0) return;
                     total += n;
                     pending.AddRange(buffer.AsSpan(0, n));
+                    // Opening-phase trace (PoE2 0.5.5 handshake recon): what the client actually sends first.
+                    Console.WriteLine($"[gateway] {remote} opening chunk: +{n} B, pending {pending.Count} B: {Convert.ToHexString(pending.Take(64).ToArray())}");
                     opening = InstanceProtocol.TryReadOpening([.. pending]);
                 }
                 ticket = opening.Ticket;
