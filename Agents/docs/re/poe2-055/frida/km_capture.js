@@ -503,10 +503,10 @@ function regs17(c) {
   return o;
 }
 safeAttach('melee_lookup', '0x14140e280', { onEnter(args) { send({ ev: 'melee_lookup', regs: regs17(this.context) }); } });
-safeAttach('melee_find_in', '0x14140e441', { onEnter(args) { send({ ev: 'melee_find_in', ebx: (this.context.rbx.toNumber() & 0xffffffff).toString(), regs: regs17(this.context) }); } });
+safeAttach('melee_find_in', '0x14140e441', { onEnter(args) { send({ ev: 'melee_find_in', ebx: (this.context.rbx.toInt32() >>> 0).toString(), regs: regs17(this.context) }); } });
 safeAttach('melee_find_out', '0x14140e446', { onEnter(args) { send({ ev: 'melee_find_out', regs: regs17(this.context) }); } });
-safeAttach('melee_vcall_pre', '0x14140e3cf', { onEnter(args) { send({ ev: 'melee_vcall_pre', ebx: (this.context.rbx.toNumber() & 0xffffffff).toString() }); } });
-safeAttach('melee_vcall_post', '0x14140e3d2', { onEnter(args) { send({ ev: 'melee_vcall_post', ebx: (this.context.rbx.toNumber() & 0xffffffff).toString() }); } });
+safeAttach('melee_vcall_pre', '0x14140e3cf', { onEnter(args) { send({ ev: 'melee_vcall_pre', ebx: (this.context.rbx.toInt32() >>> 0).toString() }); } });
+safeAttach('melee_vcall_post', '0x14140e3d2', { onEnter(args) { send({ ev: 'melee_vcall_post', ebx: (this.context.rbx.toInt32() >>> 0).toString() }); } });
 var savSeen = {};
 safeAttach('sav_conv', '0x14244ace0', {
   onEnter(args) { this.a0 = args[0].toString(); this.a1 = args[1].toString(); },
@@ -538,7 +538,7 @@ okAttach('mapfind', '0x14241c760', {
   onEnter(args) {
     this.keep = inLookup(this.returnAddress);
     if (!this.keep) return;
-    send({ ev: 'mapfind_in', m0: rd18(args[0], 0), m8: rd18(args[0], 8), m18: rd18(args[0], 0x18), m20: rd18(args[0], 0x20), m36: rd18(args[0], 0x36), keyhex: hex18(args[1], 16), ebx: (this.context.rbx.toNumber() & 0xffffffff).toString() });
+    send({ ev: 'mapfind_in', m0: rd18(args[0], 0), m8: rd18(args[0], 8), m18: rd18(args[0], 0x18), m20: rd18(args[0], 0x20), m36: rd18(args[0], 0x36), keyhex: hex18(args[1], 16), ebx: (this.context.rbx.toInt32() >>> 0).toString() });
   },
   onLeave(ret) { if (this.keep) send({ ev: 'mapfind_out', ret: ret.toString(), deref: rd18(ret, 0) }); }
 });
@@ -558,14 +558,14 @@ okAttach('mapping', '0x1426aca90', {
       try {
         const b = t.add(0xf8).readPointer(), e = t.add(0x100).readPointer();
         const diff = e.sub(b);
-        const dn = (typeof diff === 'number') ? diff : diff.toNumber();
+        const dn = (typeof diff === 'number') ? diff : diff.toInt32();
         const n = Math.min(64, Math.max(0, Math.floor(dn / 8)));
         const parts = [];
         for (let i = 0; i < n; i++) { try { const kv = b.add(i * 8); parts.push(kv.readU32().toString() + ':' + kv.add(4).readU32().toString()); } catch (e2) { parts.push('?'); } }
         tab = 'b=' + b.toString() + ' e=' + e.toString() + ' n=' + n + ' [' + parts.join(',') + ']';
       } catch (e) { tab = 'ERR:' + String(e).slice(0, 40); }
     }
-    send({ ev: 'mapping_in', n: mapN, arg0: t.toString(), edx: (this.context.rdx.toNumber() & 0xffffffff).toString(), vt: rd18(t, 0), fbLv: fbLv, tab: tab });
+    send({ ev: 'mapping_in', n: mapN, arg0: t.toString(), edx: (this.context.rdx.toInt32() >>> 0).toString(), vt: rd18(t, 0), fbLv: fbLv, tab: tab });
     this.t = t;
   },
   onLeave(ret) { send({ ev: 'mapping_out', ret: ret.toString() }); }
@@ -579,7 +579,7 @@ okAttach('sav_range2', '0x1423d86e0', {
     send({ ev: 'sav_range', ra: this.ra, out: this.context.rbx.toString(), begin: bg, end: en, empty: (bg === en) ? '1' : '0' });
   }
 });
-okAttach('ebx_out', '0x14140e3d2', { onEnter(args) { send({ ev: 'ebx_out', ebx: (this.context.rbx.toNumber() & 0xffffffff).toString() }); } });
+okAttach('ebx_out', '0x14140e3d2', { onEnter(args) { send({ ev: 'ebx_out', ebx: (this.context.rbx.toInt32() >>> 0).toString() }); } });
 okAttach('rowapp2', '0x14140ea70', {
   onEnter(args) {
     let skill = 'ERR', P = 'ERR', Pd = 'ERR', nm = 'ERR';
