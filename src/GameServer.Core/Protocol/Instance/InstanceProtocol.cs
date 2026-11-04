@@ -74,13 +74,17 @@ public static class InstanceProtocol
 
     /// <summary>
     /// S→C 0x23 in the 0.5.5 client (read 0x1421582b0; handler 0x14212306d): content/state application —
-    /// u8, a compact-int value, a flags byte (bits 0/1/2), then two counted record vectors (0x70B and 0x68B
-    /// elements). The handler fans the value out to the world aggregate's content slots and applies the
-    /// records to the session's channel listeners. This is the empty form: value 0, no flags, no records
-    /// (7 bytes in all).
+    /// u8, a compact-int value, a flags byte (bits 0/1/2), then two counted record vectors (0x70B channel
+    /// definitions and 0x68B channel state values). Per the evening4 RE: the handler calls the world
+    /// aggregate's MAIN vtable slot +0x1f0, whose implementation 0x1416820a0 calls world activation
+    /// (0x14212fd90) as its first instruction — this message is the world's activation trigger. The value
+    /// lands as a plain field at aggregate +0x11c; its one known consumer (world update 0x142130440)
+    /// computes value/1000.0 as a clamp on the dynamic resolution scale, so 1000 is the neutral value
+    /// (scale 1.0). Value 0 clamped the scale to 0 in the 2026-11-04 16:16 live session and the client
+    /// crashed during area generation. Empty record vectors are legal (proven in that same session).
     /// </summary>
-    public static byte[] ContentEmpty() =>
-        new LoginWriter().U16(ContentId).U8(0).VarintU(0).U8(0).U8(0).U8(0).ToArray();
+    public static byte[] Content(uint value = 1000) =>
+        new LoginWriter().U16(ContentId).U8(0).VarintU(value).U8(0).U8(0).U8(0).ToArray();
 
     /// <summary>
     /// S→C 0x1d in the 0.5.5 client (class vtable 0x14350af18, read 0x141f48de0; dispatcher case at 0x142122295):
