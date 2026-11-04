@@ -455,9 +455,7 @@ Interceptor.attach(at('0x1401256d0'), { onEnter(args) { send({ ev: 'agg_walk', r
 Interceptor.attach(at('0x1416292a0'), { onEnter(args) { send({ ev: 'refclean', rcx: this.context.rcx.toString(), vt: rd(this.context.rcx, 0), p340: rd(this.context.rcx, 0x340), p348: rd(this.context.rcx, 0x348) }); } });
 Interceptor.attach(at('0x14013bbf0'), { onEnter(args) { send({ ev: 'list_iter', rcx: this.context.rcx.toString(), rdx: this.context.rdx.toString() }); } });
 Interceptor.attach(at('0x142627440'), { onEnter(args) { send({ ev: 'ctor_throw', regs: regsDump(this.context) }); } });
-Interceptor.attach(at('0x141e74740'), { onEnter(args) { send({ ev: 'ctor_tail', rcx: this.context.rcx.toString(), rdx: this.context.rdx.toString() }); } });
 Interceptor.attach(at('0x141DA66C0'), { onEnter(args) { send({ ev: 'anim_read', rcx: this.context.rcx.toString() }); } });
-Interceptor.attach(at('0x140BC8280'), { onLeave(ret) { send({ ev: 'res_lookup', ret: ret.toString() }); } });
 Interceptor.attach(at('0x141D2C750'), { onEnter(args) { send({ ev: 'ao_ctor', rcx: this.context.rcx.toString(), rdx: this.context.rdx.toString() }); } });
 Interceptor.attach(at('0x1421232bf'), { onEnter(args) { send({ ev: 'walk_after_23', rcx: this.context.rcx.toString() }); } });
 send({ ev: 'v15_armed' });
@@ -475,9 +473,6 @@ Interceptor.attach(at('0x141DA66C0'), {
     try { const h = rcx.add(0x350).readPointer(); const s = h.readPointer(); s350 = derefChain(rcx.add(0x350), 2).join('>') + ' str=' + (s.readUtf16String ? (s.readUtf16String(80) || '') : ''); } catch (e) {}
     send({ ev: 'anim_entry', p350: s350, def168: rd(rcx, 0x168), p190: rd(rcx, 0x190), p198: rd(rcx, 0x198) });
   }
-});
-Interceptor.attach(at('0x140189bc0'), {
-  onEnter(args) { send({ ev: 'p350_write', rcx: this.context.rcx.toString(), ret: this.returnAddress.toString() }); }
 });
 Interceptor.attach(at('0x141da2c30'), {
   onEnter(args) { send({ ev: 'refresh10', rcx: this.context.rcx.toString(), rdx: this.context.rdx.toString() }); },
@@ -523,5 +518,4 @@ safeAttach('melee_rowapp', '0x14140ea70', {
     send({ ev: 'melee_rowapp', name: nm, arg2: args[1].toString(), p4f: rd17(args[1], 0x4f) });
   }
 });
-safeAttach('sav_range', '0x1423d86e0', { onLeave(ret) { send({ ev: 'sav_range', ret: ret.toString() }); } });
 send({ ev: 'v17_armed' });

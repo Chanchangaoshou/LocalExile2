@@ -1,13 +1,12 @@
 import frida, sys, time, os
 
-LOG = r'C:\Users\<winuser>\AppData\Local\Temp\km_capture.log'
+LOG = r'C:\Users\13276\AppData\Local\Temp\km_capture.log'
 def load_js():
-    return open(r'C:\Users\<winuser>\AppData\Local\Temp\km_capture.js', 'r', encoding='utf-8').read()
+    return open(r'C:\Users\13276\AppData\Local\Temp\km_capture.js', 'r', encoding='utf-8').read()
 
+_fh = open(LOG, 'a', encoding='utf-8', buffering=1)
 def log(msg):
-    line = time.strftime('%H:%M:%S ') + str(msg)
-    with open(LOG, 'a', encoding='utf-8') as f:
-        f.write(line + '\n')
+    _fh.write(time.strftime('%H:%M:%S ') + str(msg) + '\n')
 
 def on_message(message, data):
     log('MSG ' + str(message.get('payload') if message.get('type') == 'send' else message))
@@ -16,6 +15,11 @@ log('runner started, polling for PathOfExile.exe')
 device = frida.get_local_device()
 attached = set()
 while True:
+    try:
+        alive = {pr.pid for pr in device.enumerate_processes()}
+        attached.intersection_update(alive)
+    except Exception:
+        pass
     try:
         for proc in device.enumerate_processes():
             if proc.name.lower() == 'pathofexile.exe' and proc.pid not in attached:
