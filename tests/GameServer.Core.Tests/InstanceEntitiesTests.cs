@@ -121,6 +121,7 @@ public class InstanceEntitiesTests
             "00" +                                                            // F2nd
             "01" + "02010000" + "00" + "00" + "7A110000" + "00" + "4E110000" + // 1 skill: u32 id 0x102, selector, GEPL ref (u8, row 4474), stat-set ref (u8, row 4430)
             "00" + "00" + "00000000" + "00000000" + "00000000" + "00" + statList + // flags, supports, 3 × u32, u8, stats
+            "00" + "00" +                                                  // tail-segment count, trailing flag (0.5.5 creation reader, evening11)
             "00" + "00" + "00000000" +                                        // no soul budgets, empty byte table, no cooldown groups
             "00" + "00" + "00" + "0000" + "00" +                              // F0, F1, F2, u16, u8
             "00000000" + "00000000";                                          // four gated entries (flags 0), u32

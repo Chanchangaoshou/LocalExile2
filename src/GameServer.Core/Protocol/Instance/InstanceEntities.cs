@@ -1044,6 +1044,13 @@ public sealed record PlayerObject(string Name, byte ClassIndex, int GridX, int G
     {
         w.U32(s.Id).U8(0);
         WriteSkillRecordBody(w, s);
+        // The 0.5.5 creation-table record reader (0x142188D50) reads two more fields after the stat tables that
+        // the legacy record has no counterpart for (RE notes evening11, verified at instruction level): a
+        // tail-segment count, present when the resolved effect carries a tail list at +0x10D (the default
+        // attack's row does), and an unconditional trailing flag byte, non-zero meaning one more stat table.
+        // Both are written empty here. The legacy update-path records (WriteSkillRecord) do not get them - their
+        // readers are a different, not-yet-reversed family.
+        w.U8(0).U8(0);
     }
 
     private static void WriteSkillRecordBody(BlobWriter w, GrantedSkill s)
