@@ -274,3 +274,27 @@ Interceptor.attach(at('0x1416820a0'), {
   onEnter(args) { send({ ev: 'facet_callback' }); }
 });
 send({ ev: 'v6_armed' });
+
+// ---- v7: game state machine + instance identity setter ----
+let smCount = 0;
+Interceptor.attach(at('0x142810b70'), {
+  onEnter(args) { this.self = args[0]; },
+  onLeave(retval) {
+    if (smCount++ > 80) return;
+    let idx = -1;
+    try { idx = this.self.add(0x518).readU32(); } catch (e) {}
+    send({ ev: 'sm_transition', idx });
+  }
+});
+let sm2Count = 0;
+Interceptor.attach(at('0x142812680'), {
+  onEnter(args) { if (sm2Count++ < 80) send({ ev: 'sm_select' }); }
+});
+Interceptor.attach(at('0x14211f920'), {
+  onEnter(args) {
+    let a1 = -1;
+    try { a1 = args[1].toInt32() & 0xffff; } catch (e) {}
+    send({ ev: 'identity_set', a1 });
+  }
+});
+send({ ev: 'v7_armed' });
