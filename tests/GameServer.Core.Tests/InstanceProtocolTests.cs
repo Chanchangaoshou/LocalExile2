@@ -9,9 +9,9 @@ public class InstanceProtocolTests
 {
 
     [Fact]
-    public void Identity_and_content_match_the_0x5_5_forms()
+    public void Disconnect_reason_and_content_match_the_0x5_5_forms()
     {
-        Assert.Equal("00280000010000", Convert.ToHexString(InstanceProtocol.Identity(1, "")));
+        Assert.Equal("00280000010000", Convert.ToHexString(InstanceProtocol.DisconnectWithReason(1, "")));
         Assert.Equal("00230083E8000000", Convert.ToHexString(InstanceProtocol.Content()));
     }
     // The first bytes a real 0.5.5 client sent to the instance server after 0x14 (ticket 0x48ce8271), live capture 2026-11-04.

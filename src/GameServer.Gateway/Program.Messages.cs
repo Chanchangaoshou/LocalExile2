@@ -616,6 +616,13 @@ partial class Program
                     // stay unused until each message is reversed.
                     RecordVisit(conn);
                     await SendPlayerObject55(remote, stream, ciphers, conn);
+                    // S2 (evening6): only NOW - the client has finished generating the area and
+                    // its local world assembly has populated the aggregate (incl. +0x1270) - send
+                    // the 0x23 content application (value 1000): its handler activates the world,
+                    // which drains the queue and dispatches the CreateObject queued just above.
+                    // In the connection burst this same message crashed the activation callback's
+                    // tail on the still-null +0x1270 (S1, 2026-11-04 17:29).
+                    await Send(remote, stream, ciphers, InstanceProtocol.Content(), "0x0023 content/state S2 (value 1000)");
                     conn.PlayerSent = true;
                 }
             }

@@ -176,34 +176,18 @@ partial class Program
                     Text: resolved.League ?? "", LeagueStats: LeagueStatsFor(conn.MainAscendancy),
                     TerrainData: layout.Id == "Delve_Main" ? InstanceDelve.FirstMineTerrain() : null,
                     AchievementSets: layout.Id is "Delve_Hub" or "Delve_Main" ? [2] : null);
-                // 0.5.5: the instance identity (0x28) precedes the area — its handler sets the session's
-                // identified flag ([session+0x2270]); the client's own fallback default is (0xf, "").
-                // The name must be the account name, NOT empty: with "" the 2026-11-04 16:25 live session
-                // disconnected 35 ms after the area packet with the client's account-name validation
-                // error ("account length must be more than 3 characters, [A-Za-z0-9_]") — the only such
-                // line in the whole day's Client.txt — and never sent the 0x9a area-generated reply that
-                // every pre-0x28 session sent. (SOLUTION-PLAN-2026-11-04 §2, regression from e0f85f5.)
-                // CONTROL EXPERIMENT (SOLUTION-PLAN 2.3): the 0x28 send is disabled entirely. Every
-                // session that carried it (empty name or account name) died ~35 ms after this burst —
-                // 16:50 even logged the identity name itself as the abnormal-disconnect reason — while
-                // every pre-0x28 session reached the 0x9a reply. If 0x9a returns now, our 0x28 encoding
-                // is the poison and gets re-derived byte-by-byte from read 0x142151cd0; if it does not,
-                // the regression is elsewhere (the Auth-side 0x15 probe is the next suspect).
-                string identityName = conn.Account ?? conn.Character ?? "";
-                _ = identityName;
+                // 0x28 is NEVER sent in the entry sequence: evening5 proved it is the client's
+                // disconnect-with-reason (kick) message - its "key" is a reason code looked up in
+                // the client's error table and its text is echoed verbatim after
+                // "Abnormal disconnect:". Sending it (empty name or account name) killed every
+                // 2026-11-04 session ~35 ms after this burst; the control session without it
+                // restored the 0x9a baseline at once. See InstanceProtocol.DisconnectWithReason.
                 await Send(remote, stream, ciphers, area.Encode(), $"0x001e {area}; ascendancy family {conn.MainAscendancy.Selection?.Family}");
-                // S1 (SOLUTION-PLAN v2 section 2): the ONLY variable against the 2026-11-04 16:16
-                // crash session is the 0x23 compact-int value, 0 -> 1000. Same timing (in the
-                // connection burst, before the client's 0x9a), same empty queue, and no CreateObject
-                // is sent on this path yet - so a crash here cannot be the entity constructor or
-                // the player blob, and a clean activation pins the 16:16 crash on the value (its
-                // one known consumer clamps the render resolution scale by value/1000).
-                await Send(remote, stream, ciphers, InstanceProtocol.Content(), "0x0023 content/state S1 (value 1000)");
-                // 0.5.5: the content/state application (0x23) is NOT sent here. Sequencing per
-                // SOLUTION-PLAN-2026-11-04: S1 isolates the 0x28 identity-name fix on the pre-0x28
-                // baseline (0x11 + 0x28 + 0x1e,判据 = the 0x9a reply returns); S2 then sends 0x23 only
-                // after the client's 0x9a, behind the queued 0x2f7 CreateObject, with the neutral
-                // value 1000 (evening4: value/1000 clamps the render resolution scale).
+                // The 0x23 content application is NOT sent here either: in the burst it forces
+                // world activation mid-generation, and the activation callback's tail dereferences
+                // the aggregate's +0x1270 subsystem pointer, which the client's local world
+                // assembly only populates around generation completion (S1 crash, evening6).
+                // It goes out after the client's 0x9a instead - see the AreaGenerated handler (S2).
                 if (level != resolved.Level)
                 {
                     // The saved experience is the character's level: Auth's (the ticket's) was not updated at the last level-up.

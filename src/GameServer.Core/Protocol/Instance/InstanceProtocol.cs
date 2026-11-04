@@ -61,16 +61,20 @@ public static class InstanceProtocol
 
     public const ushort TickId = 0x1c, PongId = 0x1d, AreaGeneratedId = 0x9a;
 
-    public const ushort IdentityId = 0x28, ContentId = 0x23;
+    public const ushort DisconnectWithReasonId = 0x28, ContentId = 0x23;
 
     /// <summary>
     /// S→C 0x28 in the 0.5.5 client (class vtable 0x14350B058, read 0x142151cd0; dispatcher handler
-    /// 0x14212227f → 0x14211f920): the instance identity — u8, u16 BE key, wstring name. The handler stores
-    /// key/name on the session and sets [session+0x2270] = 1; the dispatcher itself falls back to
-    /// (0xf, "") when it dispatches while unidentified, so a real server is expected to send it.
+    /// 0x14212227f → teardown 0x14211f920): DISCONNECT WITH REASON — u8 (unused), u16 BE reason code,
+    /// wstring reason text. The handler tears the session down with this reason: with an empty text
+    /// the code is looked up in the client's error table; a non-empty text is shown verbatim after
+    /// "Abnormal disconnect:". It is NOT an identity message (evening5 audit; the dispatcher's
+    /// (0xf, "") fallback is the client's own default reason for a dead connection, not evidence a
+    /// server sends it). Never send it in the entry sequence; it exists so a deliberate kick
+    /// can be expressed.
     /// </summary>
-    public static byte[] Identity(ushort key, string name) =>
-        new LoginWriter().U16(IdentityId).U8(0).U16(key).WStr(name).ToArray();
+    public static byte[] DisconnectWithReason(ushort reasonCode, string reason) =>
+        new LoginWriter().U16(DisconnectWithReasonId).U8(0).U16(reasonCode).WStr(reason).ToArray();
 
     /// <summary>
     /// S→C 0x23 in the 0.5.5 client (read 0x1421582b0; handler 0x14212306d): content/state application —
