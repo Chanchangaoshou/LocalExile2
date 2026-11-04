@@ -61,6 +61,27 @@ public static class InstanceProtocol
 
     public const ushort TickId = 0x1c, PongId = 0x1d, AreaGeneratedId = 0x9a;
 
+    public const ushort IdentityId = 0x28, ContentId = 0x23;
+
+    /// <summary>
+    /// S→C 0x28 in the 0.5.5 client (class vtable 0x14350B058, read 0x142151cd0; dispatcher handler
+    /// 0x14212227f → 0x14211f920): the instance identity — u8, u16 BE key, wstring name. The handler stores
+    /// key/name on the session and sets [session+0x2270] = 1; the dispatcher itself falls back to
+    /// (0xf, "") when it dispatches while unidentified, so a real server is expected to send it.
+    /// </summary>
+    public static byte[] Identity(ushort key, string name) =>
+        new LoginWriter().U16(IdentityId).U8(0).U16(key).WStr(name).ToArray();
+
+    /// <summary>
+    /// S→C 0x23 in the 0.5.5 client (read 0x1421582b0; handler 0x14212306d): content/state application —
+    /// u8, a compact-int value, a flags byte (bits 0/1/2), then two counted record vectors (0x70B and 0x68B
+    /// elements). The handler fans the value out to the world aggregate's content slots and applies the
+    /// records to the session's channel listeners. This is the empty form: value 0, no flags, no records
+    /// (7 bytes in all).
+    /// </summary>
+    public static byte[] ContentEmpty() =>
+        new LoginWriter().U16(ContentId).U8(0).VarintU(0).U8(0).U8(0).U8(0).ToArray();
+
     /// <summary>
     /// S→C 0x1d in the 0.5.5 client (class vtable 0x14350af18, read 0x141f48de0; dispatcher case at 0x142122295):
     /// acknowledges the client's 0x1c ticks (class vtable 0x1434e5aa8, read 0x141f48a50: a u32 counter that doubles

@@ -176,7 +176,14 @@ partial class Program
                     Text: resolved.League ?? "", LeagueStats: LeagueStatsFor(conn.MainAscendancy),
                     TerrainData: layout.Id == "Delve_Main" ? InstanceDelve.FirstMineTerrain() : null,
                     AchievementSets: layout.Id is "Delve_Hub" or "Delve_Main" ? [2] : null);
+                // 0.5.5: the instance identity (0x28) precedes the area — its handler sets the session's
+                // identified flag ([session+0x2270]); the client's own fallback default is (0xf, "").
+                await Send(remote, stream, ciphers, InstanceProtocol.Identity((ushort)instanceId, ""),
+                    $"0x0028 instance identity (key {instanceId})");
                 await Send(remote, stream, ciphers, area.Encode(), $"0x001e {area}; ascendancy family {conn.MainAscendancy.Selection?.Family}");
+                // 0.5.5: the empty content/state application (0x23) follows the area; it fans out to the
+                // world aggregate's content slots and the session's channel listeners.
+                await Send(remote, stream, ciphers, InstanceProtocol.ContentEmpty(), "0x0023 content/state (empty)");
                 if (level != resolved.Level)
                 {
                     // The saved experience is the character's level: Auth's (the ticket's) was not updated at the last level-up.
