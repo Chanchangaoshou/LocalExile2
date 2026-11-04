@@ -66,7 +66,7 @@ public sealed class HncSender
     public static ConnectionCiphers Pair(ReadOnlySpan<byte> instanceKey, bool isClient) => new(DeriveKey(instanceKey), isClient);
 
     /// <summary>
-    /// The u32 for a 0x1c carrying four idle (zero) HNC bytes. The reader (0x141fa0720) feeds bits 9..31 and then
+    /// The u32 for a 0x1d pong carrying four idle (zero) HNC bytes. The 0.5.5 reader (0x141f48de0) feeds bits 9..31 and then
     /// bits 0..8 into the accumulator, so the byte stream r (little-endian) is rotr(v, 9) and v = rotl(r, 9).
     /// </summary>
     public uint NextIdleU32()
@@ -77,7 +77,7 @@ public sealed class HncSender
         return BitOperations.RotateLeft(System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(b), 9);
     }
 
-    /// <summary>The HNC bytes the client would see for carrier u32 <paramref name="v"/> of a 0x1c (before decryption).</summary>
+    /// <summary>The HNC bytes the client would see for carrier u32 <paramref name="v"/> of a 0x1d pong (before decryption).</summary>
     public static byte[] CarrierBytes(uint v)
     {
         byte[] r = new byte[4];

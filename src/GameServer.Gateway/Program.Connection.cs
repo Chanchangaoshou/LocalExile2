@@ -176,7 +176,7 @@ partial class Program
                     Text: resolved.League ?? "", LeagueStats: LeagueStatsFor(conn.MainAscendancy),
                     TerrainData: layout.Id == "Delve_Main" ? InstanceDelve.FirstMineTerrain() : null,
                     AchievementSets: layout.Id is "Delve_Hub" or "Delve_Main" ? [2] : null);
-                await Send(remote, stream, ciphers, area.Encode(), $"0x001d {area}; ascendancy family {conn.MainAscendancy.Selection?.Family}");
+                await Send(remote, stream, ciphers, area.Encode(), $"0x001e {area}; ascendancy family {conn.MainAscendancy.Selection?.Family}");
                 if (level != resolved.Level)
                 {
                     // The saved experience is the character's level: Auth's (the ticket's) was not updated at the last level-up.
@@ -281,8 +281,8 @@ partial class Program
                           $"{reason ?? "?"}{(dump is null ? "" : $" (packets: {dump})")}");
     }
 
-    // The read loop's part: decrypts one read, frames it (InstanceProtocol.SplitClientMessages), answers its 0x1b ticks with
-    // 0x1c at once and queues the rest for RunHandlers. readAt is when the read completed: a tick answered more than
+    // The read loop's part: decrypts one read, frames it (InstanceProtocol.SplitClientMessages), answers its 0x1c ticks with
+    // 0x1d at once and queues the rest for RunHandlers. readAt is when the read completed: a tick answered more than
     // ClientInbox.SlowAfter later is logged.
     static async Task OnClientData(string remote, NetworkStream stream, ConnectionCiphers ciphers, byte[] data, ClientState conn,
         ClientInbox inbox, long readAt)
@@ -306,11 +306,11 @@ partial class Program
                     Console.WriteLine($"[move-trace] qpc={readAt} recv 0x{id:x4} {Convert.ToHexString(bytes)}");
         foreach (var bytes in inbox.Post(messages, unknown, readAt))
         {
-            if (conn.Ticks++ % 50 == 0 && ServerTrace.Ticks) Console.WriteLine($"[gateway] {remote} <= 0x001b tick #{conn.Ticks}: {Convert.ToHexString(bytes)} (answered with 0x001c)");
+            if (conn.Ticks++ % 50 == 0 && ServerTrace.Ticks) Console.WriteLine($"[gateway] {remote} <= 0x001c tick #{conn.Ticks}: {Convert.ToHexString(bytes)} (answered with 0x001d)");
             await SendPong(stream, ciphers, InstanceProtocol.Pong(serverDelayMs: ClientInbox.ServerDelayMs, ackIndex: inbox.NextAckIndex(), sideChannel: conn.Hnc!.NextIdleU32()));
             var waited = Stopwatch.GetElapsedTime(readAt);
             if (waited > ClientInbox.SlowAfter)
-                Console.WriteLine($"[gateway] {remote} slow tick #{conn.Ticks}: 0x001c sent {waited.TotalMilliseconds:0} ms after the 0x001b was read");
+                Console.WriteLine($"[gateway] {remote} slow tick #{conn.Ticks}: 0x001d sent {waited.TotalMilliseconds:0} ms after the 0x001c was read");
         }
     }
 
@@ -461,7 +461,7 @@ partial class Program
         finally { wire.Release(); performance.Elapsed(LatencyPhase.WireHold, heldAt); }
     }
 
-    // A tick's answer (0x1c) only reports that the server is there: it needs no game state, so it takes the wire alone
+    // A tick's answer (0x1d) only reports that the server is there: it needs no game state, so it takes the wire alone
     // and goes out between two other packets instead of waiting behind their state callbacks (combat, Rage, stats).
     static Task SendPong(NetworkStream stream, ConnectionCiphers ciphers, byte[] bytes) => Write(stream, ciphers, bytes);
 

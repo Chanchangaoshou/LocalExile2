@@ -82,7 +82,7 @@ public class InstanceMovementTests
     public void Wake_zone_pong_move_and_teleport_layouts()
     {
         Assert.Equal("01A900001000000000000000", Convert.ToHexString(InstanceProtocol.EnterWakeZone(0x1000)));
-        Assert.Equal("001C0000000012345678", Convert.ToHexString(InstanceProtocol.Pong(0, 0, 0x12345678)));
+        Assert.Equal("001D0000000012345678", Convert.ToHexString(InstanceProtocol.Pong(0, 0, 0x12345678)));
         Assert.Equal("01BA00001000000000000000000000E8000000E5000000004214000000",
             Convert.ToHexString(InstanceProtocol.MoveTo(0x1000, 232, 229, 37f)));
         Assert.Equal("01B700001000000000000000000000E8000000E50000000000000000",

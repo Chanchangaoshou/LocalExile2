@@ -6,15 +6,24 @@ namespace GameServer.Core.Tests;
 public sealed class DelveEntryProtocolTests
 {
     [Fact]
-    public void Mine_enables_the_shared_upgrade_container_without_changing_the_extra_terrain()
+    public void Achievement_sets_encode_in_the_0x1e_area_packet()
     {
-        var packet = new AreaInstance(1, InstanceDelve.MineArea, 1, 0,
-            TerrainData: InstanceDelve.FirstMineTerrain(), AchievementSets: [2]).Encode();
-        // Empty text: fixed header ends at byte 24, then two empty vec16 lists.
-        Assert.Equal(new byte[] { 1, 2, 0, 0, 0, 20 }, packet[28..34]);
-        Assert.Equal(InstanceDelve.FirstMineTerrain(), packet[34..]);
+        var packet = new AreaInstance(1, InstanceDelve.MineArea, 1, 0, AchievementSets: [2]).Encode();
+        // The achievement list is the u8-counted vector at +0x58 of the 0x1e class: with an empty
+        // league string its count lands at byte 33 and the entry right after it.
+        Assert.Equal((byte)1, packet[33]);
+        Assert.Equal((byte)2, packet[34]);
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new AreaInstance(1, 1, 1, 0, AchievementSets: new byte[256]).Encode());
+    }
+
+    [Fact]
+    public void Terrain_data_is_not_encoded_until_the_0_5_5_terrain_block_is_reversed()
+    {
+        // The 0.5.5 client reads the terrain block (+0xd0 of the 0x1e class) as a vector of 8-byte
+        // elements, not as the older client's length-prefixed blob.
+        Assert.Throws<NotSupportedException>(() => new AreaInstance(1, InstanceDelve.MineArea, 1, 0,
+            TerrainData: InstanceDelve.FirstMineTerrain(), AchievementSets: [2]).Encode());
     }
 
     [Fact]
@@ -131,16 +140,12 @@ public sealed class DelveEntryProtocolTests
         Assert.Equal(7, terrain[15]); // First Azurite quest feature.
         Assert.Equal(0x10, terrain[11] & 0xf0);
         Assert.Equal(0x40, terrain[16] & 0xf0);
-        var plain = new AreaInstance(1, InstanceDelve.MineArea, 1, 0).Encode();
-        var mine = new AreaInstance(1, InstanceDelve.MineArea, 1, 0, TerrainData: terrain).Encode();
-        Assert.Equal(plain.Length + 2 + terrain.Length, mine.Length);
-        Assert.Equal(terrain.Length, BinaryPrimitives.ReadUInt16BigEndian(mine.AsSpan(plain.Length)));
-        Assert.Equal(terrain, mine[(plain.Length + 2)..]);
-        Assert.Single(plain.Zip(mine), pair => pair.First != pair.Second); // Only the extra-data flag changes.
+        Assert.Throws<NotSupportedException>(() =>
+            new AreaInstance(1, InstanceDelve.MineArea, 1, 0, TerrainData: terrain).Encode());
     }
 
     [Fact]
     public void Oversized_extra_terrain_is_rejected_instead_of_wrapping_the_wire_length() =>
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
+        Assert.Throws<NotSupportedException>(() =>
             new AreaInstance(1, InstanceDelve.MineArea, 1, 0, TerrainData: new byte[65536]).Encode());
 }

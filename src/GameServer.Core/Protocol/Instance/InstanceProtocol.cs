@@ -13,7 +13,7 @@ namespace GameServer.Core.Protocol.Instance;
 /// </summary>
 public static class InstanceProtocol
 {
-    public const ushort TicketId = 0x0f, HelloId = 0x0e, StartEncryptionId = 0x11, AreaInstanceId = 0x1d, EnterAreaId = 0x21;
+    public const ushort TicketId = 0x0f, HelloId = 0x0e, StartEncryptionId = 0x11, AreaInstanceId = 0x1e, EnterAreaId = 0x21;
 
     /// <summary>Length of the client's plaintext opening: 0x0F (2 + 4) followed by 0x0E (2 + 12 + 4 + 4 + 1).
     /// The 0.5.5 client sends no realm byte (the PoE1 client's opening had one: 30 bytes).</summary>
@@ -59,23 +59,26 @@ public static class InstanceProtocol
 
     public static byte[] WeaponSet(bool second) => new LoginWriter().U16(WeaponSetId).U8((byte)(second ? 1 : 0)).ToArray();
 
-    public const ushort TickId = 0x1b, PongId = 0x1c, AreaGeneratedId = 0x7d;
+    public const ushort TickId = 0x1c, PongId = 0x1d, AreaGeneratedId = 0x7d;
 
     /// <summary>
-    /// S→C 0x1c (class 0x1435dc8c0, read 0x141fa0720; dispatcher case 5 → 0x142155930): acknowledges the client's 0x1b
-    /// ticks. Fields: u16 server delay (ms, subtracted from the measured round trip), u16 index into the client's queue
-    /// of send times (+0xc458; entries up to and including it are dropped), u32 (fed bit by bit into the stream's side
-    /// channel at +0xd0; 0 for us). The client's "network: N ms" is now − oldest unacknowledged send, so without 0x1c it
-    /// grows forever. One 0x1c with index 0 per received 0x1b keeps the queue empty.
+    /// S→C 0x1d in the 0.5.5 client (class vtable 0x14350af18, read 0x141f48de0; dispatcher case at 0x142122295):
+    /// acknowledges the client's 0x1c ticks (class vtable 0x1434e5aa8, read 0x141f48a50: a u32 counter that doubles
+    /// as the HNC carrier with rotation 14, plus a u8). Fields: u16 server delay (ms, subtracted from the measured
+    /// round trip), u16 index into the client's queue of send times (entries up to and including it are dropped),
+    /// u32 carrier (its bits are fed, rotation 9, into the stream's HNC side channel at +0xd0; ours carries idle
+    /// bytes from HncSender). The client's "network: N ms" is now − oldest unacknowledged send, so without 0x1d it
+    /// grows forever. One 0x1d with index 0 per received 0x1c keeps the queue empty. (The older client this fork
+    /// was first built against ran the same pair as 0x1b → 0x1c.)
     /// </summary>
     public static byte[] Pong(ushort serverDelayMs = 0, ushort ackIndex = 0, uint sideChannel = 0) =>
         new LoginWriter().U16(PongId).U16(serverDelayMs).U16(ackIndex).U32(sideChannel).ToArray();
 
-    /// <summary>Encrypted C→S messages whose length is known: 0x1b tick (u8 counter, 4 bytes; 7 in all, sent every
+    /// <summary>Encrypted C→S messages whose length is known: 0x1c tick (u32 counter + u8; 7 in all, sent every
     /// 100–500 ms in state 3 by 0x142148880) and 0x7d area generated (two u32 hashes; 10 in all).</summary>
     public const ushort UseSkillAtLocationId = 0x25, ActionStartedId = 0x1ab;
 
-    /// <summary>Encrypted C→S messages whose length is known (live captures 2026-10-16): 0x1b tick, 0x7d area generated,
+    /// <summary>Encrypted C→S messages whose length is known (live captures 2026-10-16): 0x1c tick, 0x7d area generated,
     /// 0x25 use skill at location (16), 0x015a and 0x01ef (id only). 0x0099 is 4 bytes (class 0x1435c0258, write
     /// 0x141f95200: two u8, meaning unknown), sent after entering an area together with the chat channel joins
     /// (<see cref="InstanceChat.JoinChannelId"/>) and 0x0129 (id only); the 20 bytes once taken for 0x0099 were all four.</summary>
@@ -472,47 +475,52 @@ public static class InstanceProtocol
 }
 
 /// <summary>
-/// S→C 0x1d (class 0x1435da180, write 0x1421415c0; dispatcher case 6): the instance's area. The client logs
-/// "Client-Safe Instance ID = {InstanceId}" and "Generating level {Level} area "{id}" with seed {Seed}", then queues area
-/// generation. AreaHash is WorldAreas.HASH16 (unknown: "Instance sent world area that does not exist"). Level 0 means
-/// the area's own level. LeagueStats enables flag 0x21.6 and the first compact pair list (+0x100), copied to world
-/// stats at +0x120 by 0x142183130. Other optional parts remain off. Defaults follow the constructor (0x14219d940).
+/// S→C 0x1e in the 0.5.5 client (class vtable 0x1435079d8, ctor 0x142151850, read 0x14211d340, write 0x14211cb00;
+/// dispatcher handler 0x14212269f): the instance's area. The handler looks the area up by the u16 hash at +0x1c
+/// (unknown: "Instance sent world area that does not exist"), stores the instance id (+0x18) and the league string
+/// (+0x38), and queues area generation with the seed (+0x20). The wire order below follows the read function field
+/// by field; scalar defaults follow the constructor. (The older client carried this message as 0x1d with a different
+/// layout; in 0.5.5 S→C 0x1d is the latency pong, see PongId.) The optional pair lists (flag byte 0 bit 7; objects
+/// at +0x130/+0x150/+0x170) and the terrain block (flag byte 1 bit 2; a vector of 8-byte elements at +0xd0) have no
+/// verified 0.5.5 encoding yet, so LeagueStats and TerrainData throw instead of emitting a guessed format.
 /// </summary>
 public sealed record AreaInstance(uint InstanceId, ushort AreaHash, uint Seed, byte Level, string Text = "",
-    byte B1e = 3, byte B20 = 0, byte B1f = 2, byte B24 = 0x23, byte B1d = 0, byte B28 = 0x3c,
+    byte B1e = 3, byte B20 = 0, byte B1f = 2, byte B24 = 0x23, byte B1d = 0, byte B28 = 0x39,
     IReadOnlyDictionary<uint, int>? LeagueStats = null, byte[]? TerrainData = null,
-    IReadOnlyList<byte>? AchievementSets = null)
+    IReadOnlyList<byte>? AchievementSets = null, uint Field24 = 0)
 {
     public byte[] Encode()
     {
-        bool hasStats = LeagueStats is { Count: > 0 };
-        var writer = new LoginWriter()
-            .U16(InstanceProtocol.AreaInstanceId).U32(InstanceId).U16(AreaHash).WStr(Text).U32(Seed)
-            .U8(B1e).U8(B20).U8(B1f).U8(B24).Bytes([(byte)(hasStats ? 0x40 : 0), (byte)(TerrainData is null ? 0 : 4), 0]).U8(Level).U8(B1d).U8(B28)
-            .U16(0)  // vec16<u32> +0x68
-            .U16(0); // vec16<u8> +0x80
-        // +0x50 becomes instance +0xc418. The shared achievements/league-upgrades TabControl
-        // stays hidden when this list is empty, even when the Delve child tab exists.
+        if (LeagueStats is { Count: > 0 })
+            throw new NotSupportedException("the 0.5.5 0x1e league-stat pair lists are not reversed yet");
+        if (TerrainData is not null)
+            throw new NotSupportedException("the 0.5.5 0x1e terrain block is not reversed yet");
         if (AchievementSets is { Count: > byte.MaxValue }) throw new ArgumentOutOfRangeException(nameof(AchievementSets));
+        var writer = new LoginWriter()
+            .U16(InstanceProtocol.AreaInstanceId)
+            .U8(0)              // +0x10, constructor default
+            .U32(InstanceId)    // +0x18
+            .U16(AreaHash)      // +0x1c
+            .WStr(Text)         // +0x38 (read via 0x141cfb540: u16 count + compact chars)
+            .U32(Seed)          // +0x20
+            .U8(B1e)            // +0x2a
+            .U8(B20)            // +0x2c (the wire order is +0x2a, +0x2c, +0x2b)
+            .U8(B1f)            // +0x2b
+            .U8(B24)            // -> +0x30
+            .Bytes([0, 0, 0])   // flag bitset +0x2d..+0x2f: every optional part off
+            .U8(Level)          // +0x28
+            .U8(B1d)            // +0x29
+            .U8(B28)            // -> +0x34
+            .U32(Field24)       // +0x24
+            .U16(0)             // vec16<u32> +0x70
+            .U16(0);            // vec<u8 as u32> +0x88
+        // The achievement-set list at +0x58. The shared achievements/league-upgrades TabControl
+        // stays hidden when this list is empty, even when the Delve child tab exists.
         writer.U8((byte)(AchievementSets?.Count ?? 0));
         foreach (byte set in AchievementSets ?? []) writer.U8(set);
-        writer.U16(0); // vec16<u16> +0xe0
-        if (hasStats)
-        {
-            InstanceProtocol.CompactUInt(writer, (uint)LeagueStats!.Count);
-            foreach (var (key, value) in LeagueStats.OrderBy(p => p.Key))
-            {
-                InstanceProtocol.CompactUInt(writer, key);
-                InstanceProtocol.CompactInt(writer, value);
-            }
-            InstanceProtocol.CompactUInt(writer, 0); // second compact pair list (+0x120)
-            writer.U8(0); // third list (+0x138), u8 count, no entries
-        }
-        if (TerrainData is { } terrain)
-        {
-            if (terrain.Length > ushort.MaxValue) throw new ArgumentOutOfRangeException(nameof(TerrainData));
-            writer.U16((ushort)terrain.Length).Bytes(terrain);
-        }
+        writer.U16(0);          // vec16<u16> +0xe8
+        writer.U8(0);           // block +0x100 (read via 0x14212a9a0): u8 count of 8-byte elements
+        writer.U16(0);          // vec16<u16> +0x118
         return writer.ToArray();
     }
 }

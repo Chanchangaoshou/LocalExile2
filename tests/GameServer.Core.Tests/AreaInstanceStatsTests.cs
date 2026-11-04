@@ -5,20 +5,21 @@ namespace GameServer.Core.Tests;
 public class AreaInstanceStatsTests
 {
     [Fact]
-    public void Phrecia_family_uses_the_world_stat_list_without_changing_the_league_or_other_fields()
+    public void Empty_league_stats_encode_like_no_stats()
     {
         byte[] ordinary = new AreaInstance(1, 0x235c, 1, 0).Encode();
-        byte[] phrecia = new AreaInstance(1, 0x235c, 1, 0, LeagueStats: new Dictionary<uint, int>
+        Assert.Equal(ordinary, new AreaInstance(1, 0x235c, 1, 0, LeagueStats: new Dictionary<uint, int>()).Encode());
+    }
+
+    [Fact]
+    public void League_stats_are_not_encoded_until_the_0_5_5_pair_list_format_is_reversed()
+    {
+        // The 0.5.5 client reads the pair lists as objects (+0x130/+0x150/+0x170 of the 0x1e area
+        // class, read 0x14211d340), not as the older client's compact pairs: refuse loudly instead
+        // of emitting a guessed format.
+        Assert.Throws<NotSupportedException>(() => new AreaInstance(1, 0x235c, 1, 0, LeagueStats: new Dictionary<uint, int>
         {
             [21146] = 1 // league_enable_alt_ascendancies in the verified target client's Stats.dat
-        }).Encode();
-        Assert.Equal(ordinary.Length + 7, phrecia.Length);
-        byte[] prefix = phrecia[..ordinary.Length];
-        Assert.Equal((byte)0x40, prefix[18]);
-        prefix[18] = 0;
-        Assert.Equal(ordinary, prefix);
-        // Compact unsigned count 1; unsigned key 21146 (0xc0 0x52 0x9a); signed value 1; second/final lists empty.
-        Assert.Equal(new byte[] { 1, 0xc0, 0x52, 0x9a, 1, 0, 0 }, phrecia[ordinary.Length..]);
-        Assert.Equal(ordinary, new AreaInstance(1, 0x235c, 1, 0, LeagueStats: new Dictionary<uint, int>()).Encode());
+        }).Encode());
     }
 }
