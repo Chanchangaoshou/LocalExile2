@@ -7,7 +7,8 @@ using GameServer.Core.World;
 /// Skills the server grants: a GrantedEffects Id at a level becomes the GrantedEffectsPerLevel row and the
 /// GrantedEffectStatSetsPerLevel row (of the effect's StatSet1 at that gem level) the Actor skill list refers to
 /// (Agents/docs/protocol/11-skills.md). Reads data/tables (game data, loaded on first use). Without the tables it
-/// knows only the default attack, PlayerMelee at level 1 (GEPL 4474, GESSPL 4430 in 3.29.3b).
+/// knows only the default attack: in the 0.5.5 client that is GrantedEffects row 0, 'MeleePlayer', whose
+/// level-1 GEPL and GESSPL rows are both row 0 (verified in the client's datc64 tables).
 /// </summary>
 sealed class SkillCatalog(string folder = "data", bool ruthless = false)
 {
@@ -752,8 +753,14 @@ sealed class SkillCatalog(string folder = "data", bool ruthless = false)
 
     public GrantedSkill? Find(ushort id, string effect, int level, IReadOnlyList<(uint, int)>? stats = null)
     {
-        if (_tables.Value is not { } t)
-            return effect == "PlayerMelee" && level == 1 ? new GrantedSkill(id, 4474, 4430, stats) : null;
+        // The default attack is pinned to its 0.5.5 rows: the tables under data/tables are still the previous
+        // generation's export, where "PlayerMelee" resolves to GEPL 4474 / GESSPL 4430 - rows that in the 0.5.5
+        // client are a level-12 totem support effect and an unrelated level-40 stat set, whose combination makes
+        // the client's skill construction run away (live 2026-11-04, RE notes evening10). 'MeleePlayer' level 1
+        // is GEPL row 0 / GESSPL row 0 there, with no additional stat sets. Drop this pin once data/tables holds
+        // the 0.5.5 tables and the request name becomes "MeleePlayer".
+        if (effect == "PlayerMelee" && level == 1) return new GrantedSkill(id, 0, 0, stats);
+        if (_tables.Value is not { } t) return null;
         int effectRow = EffectRow(effect);
         if (effectRow < 0 || effectRow >= t.StatSets.Count) return null;
         int gepl = t.PerLevel.FindIndex(r => r.Effect == effectRow && r.Level == level);
