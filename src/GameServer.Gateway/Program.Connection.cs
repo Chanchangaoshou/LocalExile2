@@ -126,14 +126,10 @@ partial class Program
                     ciphers = new ConnectionCiphers(loginKm, isClient: false);
                     Console.WriteLine($"[gateway] {remote} instance ciphers from LOGIN key material (Game_INSTANCE_KEYMODE=login)");
                 }
-                var ticketProbe = ConnectionCiphers.Probe(keyring.Key(opening.Ticket));
-                Console.WriteLine($"[gateway] {remote} km probe: ticket send {ticketProbe.Send} recv {ticketProbe.Receive}");
-                if (resolved.LoginKeyMaterial is { Length: > 0 } probeText &&
-                    Convert.TryFromBase64String(probeText, new byte[64], out int probeWritten) && probeWritten == 64)
-                {
-                    var loginProbe = ConnectionCiphers.Probe(Convert.FromBase64String(probeText));
-                    Console.WriteLine($"[gateway] {remote} km probe: login  send {loginProbe.Send} recv {loginProbe.Receive}");
-                }
+                byte[]? loginKmBytes = resolved.LoginKeyMaterial is { Length: > 0 } probeText
+                    && Convert.TryFromBase64String(probeText, new byte[64], out int probeWritten) && probeWritten == 64
+                    ? Convert.FromBase64String(probeText) : null;
+                KmProbe.Log($"[gateway] {remote}", opening.Ticket, keyring.Key(opening.Ticket), loginKmBytes, Console.WriteLine);
                 await stream.WriteAsync(InstanceProtocol.StartEncryption());
                 Console.WriteLine($"[gateway] {remote} => 0x0011 (start encryption)");
 

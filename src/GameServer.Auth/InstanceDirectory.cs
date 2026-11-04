@@ -81,13 +81,7 @@ sealed class InstanceDirectory(InstanceRegistry registry, AccountService? accoun
             session.CharacterClassId);
         _latest[character] = ticket;
         Console.WriteLine($"[auth] ticket 0x{ticket:x8}: {character} → instance {inst.Id} (area 0x{inst.AreaHash:x4}, seed {inst.Seed}, {inst.Players.Count} player(s))");
-        var ticketProbe = ConnectionCiphers.Probe(session.Keyring.Key(ticket));
-        Console.WriteLine($"[auth] ticket 0x{ticket:x8} km probe: ticket send {ticketProbe.Send} recv {ticketProbe.Receive}");
-        if (_tickets[ticket].LoginKeyMaterial is { Length: 64 } loginKmForProbe)
-        {
-            var loginProbe = ConnectionCiphers.Probe(loginKmForProbe);
-            Console.WriteLine($"[auth] ticket 0x{ticket:x8} km probe: login  send {loginProbe.Send} recv {loginProbe.Receive}");
-        }
+        KmProbe.Log($"[auth] ticket 0x{ticket:x8}", ticket, session.Keyring.Key(ticket), _tickets[ticket].LoginKeyMaterial, Console.WriteLine);
         return ticket;
     }
 

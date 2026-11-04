@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Numerics;
 using System.Security.Cryptography;
 
@@ -90,6 +91,39 @@ public sealed class ConnectionCiphers
         var send = new byte[16]; ciphers.Send.Process(send);
         var receive = new byte[16]; ciphers.Receive.Process(receive);
         return (Convert.ToHexString(send), Convert.ToHexString(receive));
+    }
+}
+
+/// <summary>Key-material diagnostics for the instance connection: the keystream prefixes of every
+/// plausible material the client might key it from, plus candidate opening digests. A deserialisation
+/// failure exposes the client's first keystream bytes through the bogus packet id, and the opening
+/// carries its digest; comparing both against these lines names the material and the formula.</summary>
+public static class KmProbe
+{
+    public static void Log(string tag, uint ticket, byte[] ticketKey, byte[]? loginKm, Action<string> log)
+    {
+        Span<byte> tb = stackalloc byte[4];
+        BinaryPrimitives.WriteUInt32BigEndian(tb, ticket);
+        var mats = new List<(string Name, byte[] Km)> { ("ticket", ticketKey) };
+        if (loginKm is { Length: 64 })
+        {
+            mats.Add(("login", loginKm));
+            mats.Add(("s512(k|l)", SHA512.HashData([.. ticketKey, .. loginKm])));
+            mats.Add(("s512(l|k)", SHA512.HashData([.. loginKm, .. ticketKey])));
+            mats.Add(("s512(l|t)", SHA512.HashData([.. loginKm, .. tb])));
+            mats.Add(("hmac(k,l)", HMACSHA512.HashData(ticketKey, loginKm)));
+            mats.Add(("hmac(l,k)", HMACSHA512.HashData(loginKm, ticketKey)));
+        }
+        mats.Add(("s512(k|t)", SHA512.HashData([.. ticketKey, .. tb])));
+        foreach (var (name, km) in mats)
+        {
+            var p = ConnectionCiphers.Probe(km);
+            log($"{tag} km probe [{name}]: send {p.Send} recv {p.Receive}");
+        }
+        string D(byte[] b) => Convert.ToHexString(b[..12]);
+        log($"{tag} digest candidates: hmac(k,t) {D(HMACSHA512.HashData(ticketKey, tb))} s512(k|t) {D(SHA512.HashData([.. ticketKey, .. tb]))} s512(t|k) {D(SHA512.HashData([.. tb, .. ticketKey]))}");
+        if (loginKm is { Length: 64 })
+            log($"{tag} digest candidates: hmac(l,t) {D(HMACSHA512.HashData(loginKm, tb))} s512(l|t) {D(SHA512.HashData([.. loginKm, .. tb]))} s512(t|l) {D(SHA512.HashData([.. tb, .. loginKm]))}");
     }
 }
 
