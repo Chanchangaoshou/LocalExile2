@@ -2375,3 +2375,106 @@ fn(out, r15=keyobj, r14=ctx):
 6. **0x1423d86e0 leave**：log 返回的 range 空/非空——定阶段 1 是否命中 SAV 行。
 
 判读顺序：#2 定运行时 key（ebx，P）→ #1/#5 定 P 身份（是否为 AS 661 行对象）→ #3/#4 定 ebx 来源（SAV 换算 vs 虚调用 vs 初值 0x153）→ 若 ebx≠1，查虚调用 this 的类型与 slot 0 语义（另立静态任务）；若 P 不对，查技能对象 ActiveSkill 引用的填充点（记录读程定义块下游或构造后步骤）。
+
+## 2026-11-05 evening15 — runtime key（运行时刻键重构）
+
+会话：2026-11-05 05:48:42，探针 v17 + 洪水修复，日志干净；网关 blob 1191 B；Client.txt 止于 `Could not find row for MeleeAttackActionClient skill MeleePlayer::1` WARN；网关 05:48:56 见断开。fnC_done 全程零触发——死于构造中途，与 20:37/21:07 同型。完整过滤 trace：`trace-0548-v17.txt`；原始日志在 PC `Temp\km_capture.log`（多会话追加，查 05:48 段须按时间前缀过滤）。
+
+本章纠正两处简报/前章的记录错误：(1) `sav_range` 钩子已在 02:17 洪水修复中移除，05:48 会话根本没有该钩子——其零触发不能证明 SAV range 为空；(2) 语境虚表 VA 曾按错误基址换算成 0x1427EEF38（读到 .text 代码），05:48 会话真实 exe 基址为 0x7ff607880000（throw_ctx 模块枚举），虚表 VA 应为 **0x14357EF38**，slot 0 = **0x1426aca90**。
+
+### 15.1 查找函数 0x14140e280 全结构（已实证，反汇编）
+
+```
+ebx = 0x153                                    ; 0x14140e29a
+SAV 查询 0x1423d86e0（无条件调用，range 出参 [rbp-0x39]）; 0x14140e2ff
+if (begin != end):
+    cand = 0x1405cd450(range)                  ; 0x14140e363
+    if (cand && [[cand]+0x10c]):
+        ebx = 0x14244ace0(&[cand]+0x10c)       ; 0x14140e3bd，见 §15.3
+r14 = 语境对象；rcx=[r14]，r8=[rcx]（虚表 slot 0）
+ebx = slot0(语境, ebx)                          ; call 0x14140e3cf，mov ebx,eax @0x14140e3d2
+if ([r15] == 0): out = {0,0}，跳尾             ; [r15] = P（[[B]]+0x4f 解引）
+key = { u32 ebx @+0, pad, qword P @+8, qword control @+0x10 }，位于 [rbp-0x51]
+map-find 0x14241c760(map=[holder+0x28]+0x20, out=[rbp+0x7f], key) ; call @0x14140e441
+rbx = [out]；与 map 尾哨兵比较；命中 → 行指针 = [rbx+0x18]；未命中 → 零值 + WARN 路径
+```
+
+### 15.2 映射函数 slot 0 = 0x1426aca90（已实证）
+
+- 表位于 `[this+0xf8, this+0x100)`，元素 8 字节 `{u32 key, u32 value}`，按键升序；谓词 `0x1423ba4d0` = `[elem] < input`（setl）。
+- 二分 lower_bound 后：`rsi != end 且 [rsi] == input` → 返回 `[rsi+4]`；否则走 fallback：`[this+0xe8]` 非空 → 尾调用其虚表 slot 0（同一输入）；`[this+0xe8]` 为空 → **返回 0**。
+- 05:48 会话语境：`r14 = 0x37b89763390`，`[r14] = 0x7ff60adfef38` → VA 0x14357EF38（.rdata）；slot 0/1/2/3 = 0x1426aca90/0x1426ad100/0x1426ac880/0x1426ad284。
+
+### 15.3 SAV 换算 0x14244ace0（已实证）
+
+- 入参 rcx = 指向 `{ptr, control}` shared_ptr 的地址。`[rcx]==0` → 返回 **0x6a92 = 27282**（Stats 行数 27281 + 1，空指针哨兵）。
+- 否则释放 control 后：`base = [[control+0x28]]`（首 qword），返回 `((ptr - base) / 106) + 1`——步长 106 由倒数乘法确证（magic `0x4d4873ecade304d5`，`imul` 后 `sar 5`，符号修正后 +1；2^69/magic = 106.0 精确）。
+- 05:48:42 秒内成批触发 222 次：10 组三元组 ×22 次（区域生成实体，10 个实体级引用），另有一组 23 次（ret 0x3108）与一个单次离群（a0=0x37b8241ea18，ret **0x6054**）。玩家本次查表的换算调用（若 SAV 阶段运行）当在二者之一，但 a0 族与区域生成实体相同，归属无法确证（推断，弱）。
+- 输入值三歧（待 v18 定）：SAV range 为空 → **0x153**；非空 → **0x3108** 或 **0x6054** 之一。三种输入下映射均返回 0（§15.5）。
+
+### 15.4 键哈希 0x142413eb0 + FNV 0x1402a3240（已实证）
+
+- `0x1402a3240(rdx=key+8)`：P==0 → 0；否则 FNV-1a（basis `0xcbf29ce484222325`，prime `0x100000001b3`）处理 P 值本身的 8 字节（小端序，逐字节 xor 后乘），得 hP 前缀；再对 `[control+0x28]` 的 8 字节做同样 FNV 得 hQ；返回 `(hP_prefix + hQ_prefix) * prime`（control 为空时只乘 hP 前缀）。**P 按指针值哈希，不读字符串内容**（evening14 结论维持）。
+- `0x142413eb0`：`rdx = hP ^ 0x000811d69050c5d1f`（常量由指令字节 `48 b8 1f 5d 0c 05 69 1d 81 00` 确证）；ebx 混入是 **dword 移位式**（`ebx ^ basis`，乘 prime，异或 `ebx>>8`，乘，异或 `ebx>>16`，乘，异或 `ebx>>24`，乘）——不是逐字节 FNV（纠正初版验算）；终值 `((hP^C) * 0x1000193) ^ h_ebx`。
+- 验算：Q 未知（trace 未记录 `[key+0x10]` 的 control 与 `[control+0x28]`），Q=null 时 ebx ∈ {0, 1, 0x153, 0x6a92} 的哈希（及 Fibonacci 乘积高 64 位）均 ≠ find_out 的 rdx `0x86212caf3fe8e602`。哈希项**未证实、不影响 miss 定案**（§15.5 的比较失败不依赖桶位置）。
+
+### 15.5 运行时键重构与 miss 原因（已实证链）
+
+**ebx = 0（已实证）**，链条每环均有反汇编为证：
+1. 映射返回 `mov ebx, eax`（0x14140e3d2）后，至 map-find 调用之间无任何 ebx 写操作；key 构建只存 rbx。
+2. 中间 release 调用 `0x1421d7070` 入口即存 rbx/rsi 于栈帧（标准保存，rbx 不变）。
+3. map-find `0x14241c760` 两条返回路径均 `pop rbx`（早退路径 0x14241c780–787、主路径 0x14241c8c5–8c8），**rbx 全程保存**。
+4. find_out（0x14140e446）入口 `rbx = 0x0` ⟹ 映射返回 0 ⟹ **输入不在语境 +0xf8 表内，且 fallback 链（[this+0xe8]）无结果或为空**。
+
+**miss 双重决定（已实证）**：
+- (a) 键比较失败：map-find 全键比较 `[rsi]==entry dword` 且 `[rsi+8]==entry qword`；ebx=0 ≠ 行 17 的 `__col1=1`，比较必败，与 P 无关。
+- (b) 被查索引疑似空/未建：find_out 时 `[out]=0`（rsi=0x27f4dfd330，`[rsi]=0x0`），即 map-find 写入的尾哨兵 `[map+8]=0`；调用方随后 `rbx==尾哨兵` 走未命中分支（命中分支 0x14140e47f 首指令即 `[rbx+0x18]`，rbx=0 时必硬件 AV；实际死亡为 C++ 异常 + "Could not find row" WARN，与未命中分支一致）。**索引尾哨兵为 NULL 是强信号，map 本体状态（begin/buckets/count）待 v18 直接读数**。
+
+**P 非空（已实证）**：`P = 0x37ba49b68ca`（`[rdx]`，rdx=`[[B]]+0x4f`）。`melee_rowapp` 的 `p4f=0` 与 name `ERR` 均为钩子读法错误（读了 `[B+0x4f]` 而非 `[[B]]+0x4f`），不是 shared_ptr 为空或名字缺失的证据。**P 的身份（是否为 ActiveSkills 行 661 的内存对象）仍未知**——miss 定案不需要它，但任何网关修正都需要它（§15.8）。
+
+**find_in/find_out 悖论已解（探针 artifact，已实证地址）**：0x14140e441 确为 `call 0x14241c760` 指令（5 字节），0x14140e446 为返回点 `mov rbx,[rax]`。find_in 零触发而 find_out 触发一次，说明调用点钩子静默失效（attach 或回调失败且未落 hook_fail 行；同族先例：vcall_pre 在 attach 时报 hook_fail，地址在指令中间）。查表本身确已执行（find_out 触发、rdx 被哈希路径改写）。v18 改钩 map-find 函数入口（干净边界），见 §15.8。
+
+WARN 文本的 `::1` = GEPL 行 0 的 Level，与 key 的 u32 分量不是同一字段（重申 evening14）。
+
+### 15.6 0x13fff544a 定性（已实证排除 + 推断）
+
+- **不是截断的 exe 返回地址（已实证）**：05:48 基址 0x7ff607880000（低 32 位 0x78800000），20:37 基址 0x7ff64b360000（低 32 位 0x4B360000）。同一低 32 位值 0x13FFF544A 要求两会话的偏移低 32 位分别为 0x9B7F544A（≈2.6 GB）与 0xC8C9544A（≈3.3 GB），均超出映像大小（~90 MB）——不可能。
+- **不在任何已加载模块内（已实证）**：throw_ctx 模块枚举（05:48:55）显示 exe 基址 0x7ff607880000，无模块靠近 0x13fff544a（该值本身在 4 GB 以下，0x000000013FFF544A）。
+- **system 异常地址族 0x6c4dd408a（05:48）/ 0x6812f408a（20:25）（已实证特征）**：均无模块归属、跨会话在高位变化（ASLR 族 0x6???????）、低字节同为 0x8a——符合 ASLR 堆/映射区的野指针，与"死亡螺旋二次 fault"一致，不是可逆向的代码位置。
+- **定性（推断，强）**：0x13fff544a 最可能是不可靠栈回溯读出的 stale 32 位槽值（帧 2 起的回溯已确证为野指针串；确定性栈布局 + 确定性槽内容解释了跨 ASLR 值恒定）。手动映射/ JIT 可执行区的可能性未排除但无证据。**它在 throw 路径中无已证实角色**；帧 1（throw helper 调用方）才是有效信息。
+- evening12/13 的"frameless 外层帧导致 20:25 与 20:37 结局不同"解释**撤回**，改为：主事件均为 C++ 异常（0xE06D7363，经 0x142c14380），20:25 被捕获后继续、20:37 序列终止的差异原因未定（死亡螺旋二次 fault 的落点不同所致，待 v18 的 throw 点上下文区分）。
+- v18 决定性测试：throw helper 入口读 `this.returnAddress` 与 Rsp/Rbp、按模块边界做可靠 unwind、`Memory.readByteArray(ptr(0x13fff544a))` 判可读/可执行性与首字节、以及一次去掉 throw 钩子的对照会话（Frida artifact 检验）。
+
+### 15.7 +0x350 再判（已实证机制 + 推断）
+
+- 跳过分支语义确证（0x141da6983–0x141da69b5）：比较流内串长度与 +0x350 持有器串长度（`[rdx+0x10]` vs rbx），`call 0x142cb80a0` 串比较，相等 → `je 0x141da6aa1` 跳过建模；不等 → 0x141da69bb 起释放 `[rsi+0x190]/[rsi+0x198]` 旧 AO 引用并继续建模。流内路径为 IntFour.ao（字节精确，v12/v13 已证）⟹ +0x350 持有器在读时同样持有 IntFour.ao，跳过分支确已触发。
+- **H1（定义播种）支持度高于 H2（对象池复用）（推断，强）**：实体为新 spawn、持有器链完整成形（两级解引成功）、持有内容恰为定义默认值。anim_entry 串内容读出乱码是钩子读了 wstring 对象字节而非缓冲区的 artifact，不反驳 H1。
+- **结构性结论（已实证机制 + 推断）**：对默认 AO 路径，blob 的 Animated 读程按设计就是 no-op；**建模唯一路径是晚期 +0x10 刷新（0x141da2c30，分配 AO + 取描述符 + 挂 +0x360 监听）**，其触发在注册/激活之后、受 attach 门 `[owner+0x8c]&2` 控。全部死亡会话（20:25 注册后死于激活后 walk、20:37/21:07/05:48 死于构造中途）均未走到该步——**模型未现不需要独立的 Animated/blob 解释，当前最强解释就是"死在建模步骤之前"**。ctor 死因解决后若模型仍未现，再查刷新触发与 attach 门；+0x350 本身不是 bug，不改。
+- p190=p198=0（anim_entry）与"跳过分支先于任何 AO 分配"一致。
+
+### 15.8 网关侧修正：推不出——缺失环节与 v18 清单
+
+**不给出字段改法（分级：缺失环节未闭合，猜测禁止）。** 网关只控制 blob 字节；(ebx, P) 由客户端自身状态派生：ebx 经 SAV 数据 + 语境 +0xf8 表 + fallback 链，P 为技能对象内 shared_ptr 的堆身份（指针值）。已证实 ebx=0，但以下环节缺失，无法从中推出任何记录字段（Id/selector/GEPL 行号/统计表/CooldownMs）的改法——行号与 selector 已在 evening10/14 排除为缺口，剩余字段与 ebx/P 之间**无已证实的因果链**：
+1. 映射输入值（§15.3 三歧）与 +0xf8 表内容（运行时构建，静态不可见）——映射为何返回 0？
+2. 被查 Melee 索引的本体状态（begin/buckets/count，尾哨兵 NULL 的含义）——索引是否根本未建？
+3. P 的身份（`[P]` 首 qword/虚表）——是否为 AS 661 行对象？若不是，技能对象的 ActiveSkill 引用由何填充（记录读程定义块下游 0x142189c40 的 `[rbp+0x20]/[rbp+0x24]` 去向未追踪）？
+4. SAV 查询的 holder（`[rbp+0x6f]`）来源——技能对象从哪一级获得变体语境？
+
+**v18 钩子清单（只读，一次会话；客户端须重开；每钩 attach 成败在 arm 时显式落行）：**
+1. **0x14241c760 入口（map-find 本体，替代调用点钩子）**：log rcx（map）、`[rcx]`/`[rcx+8]`/`[rcx+0x18]`/`[rcx+0x20]`/`[rcx+0x36]`（map 生命体征）、r8（key）、`[r8]`（ebx）、`[r8+8]`（P）、`[r8+0x10]`（control）；leave：log rax、`[rax]`、返回值是否为尾哨兵。
+2. **0x1426aca90 入口/leave（映射函数）**：log edx（输入）、`[rcx+0xe8]`（fallback）、`[rcx+0xf8]`/`[rcx+0x100]`（表界）；leave：log eax（输出）。另 dump `[rcx+0xf8, rcx+0x100)` 全表（key/value 对，截断 64 项）。
+3. **0x1423d86e0 leave（恢复 sav_range 钩子，须防洪水：仅玩家实体窗口内启用）**：log range begin/end（空/非空）。
+4. **0x14140e3cf 入口 + 0x14140e3d2**：log edx（ebx 入）、`[r14]`（语境虚表）；0x14140e3d2：log eax（ebx 出）。（0x14140e3cf 在指令边界，已确认。）
+5. **0x14140e441 改为 0x14241c760 入口（见 #1）；0x14140e446 保留**：log `[rax]`（命中行指针或尾哨兵）与 rbx。
+6. **0x14140ea70 入口（修正读法）**：沿 `[[arg2]]+0x4f` 读 shared_ptr（P + control + `[P]`），名串读 `[[[arg2]]]` 缓冲（`[[arg2]+0x10]` 为长度域）；并 log `[[arg2]+0x4f]` 处 control 的 `[control+0x28]`（哈希第二分量 Q 的来源）。
+7. **throw 点**：0x142c14380 入口 log `this.returnAddress`、Rsp/Rbp、模块枚举（`Process.findModuleByAddress` 判 0x13fff544a）、`Memory.readByteArray(ptr('0x13fff544a'), 16)` 试读（try/catch）；**对照会话**：去掉 throw 钩子，确认 0x13fff544a 是否消失。
+8. 保留 v16 模型线钩子（anim_entry、+0x10 刷新入口、attach 门）；ctor 链钩子（ctor_tail/throw_ctx）保留。
+
+判读顺序：#1 定索引状态与运行时 key → #2 定映射为何返 0（输入/表/fallback）→ #3 定 SAV 阶段是否运行 → #6 定 P 身份 → 四者闭合后才能判断网关侧是否存在控制面；若四者均指向客户端状态缺失（索引未建/语境为空），则网关无字段可改，转向技能对象构造链的上游（GEPL 统计表内容是否影响 SAV holder 的填充）。
+
+### 15.9 evening14 §14.6 缺口 closure 状态
+
+- 缺口 1（ebx 终值）：**已闭合——ebx=0**（§15.5）。
+- 缺口 2（P 身份）：**未闭合**，v18 #6。
+- 缺口 3（与网关字段的因果）：**未闭合**，v18 #1–#4 闭合后判定。
+- evening14 §14.4 的"网关侧不存在 MeleeAttackActionClient 字段"维持；§14.5 selector 结论维持。

@@ -519,3 +519,53 @@ safeAttach('melee_rowapp', '0x14140ea70', {
   }
 });
 send({ ev: 'v17_armed' });
+
+// ---- v18: map vitals + mapping input (evening15) ----
+function okAttach(tag, va, cbs) {
+  try { Interceptor.attach(at(va), cbs); send({ ev: 'hook_ok', tag: tag }); }
+  catch (e) { send({ ev: 'hook_fail', tag: tag, err: String(e).slice(0, 80) }); }
+}
+function rd18(p, off) { try { return p.add(off).readPointer().toString(); } catch (e) { return 'ERR'; } }
+function hex18(p, n) { try { const a = new Uint8Array(p.readByteArray(n)); let s = ''; for (let i = 0; i < a.length; i++) s += a[i].toString(16).padStart(2, '0'); return s; } catch (e) { return 'ERR'; } }
+okAttach('mapfind', '0x14241c760', {
+  onEnter(args) {
+    send({ ev: 'mapfind_in', m0: rd18(args[0], 0), m8: rd18(args[0], 8), m18: rd18(args[0], 0x18), m20: rd18(args[0], 0x20), m36: rd18(args[0], 0x36), keyhex: hex18(args[1], 16), ebx: (this.context.rbx.toNumber() & 0xffffffff).toString() });
+  },
+  onLeave(ret) { send({ ev: 'mapfind_out', ret: ret.toString(), deref: rd18(ret, 0) }); }
+});
+okAttach('mapping', '0x1426aca90', {
+  onEnter(args) {
+    const t = args[0];
+    let tab = 'ERR';
+    try {
+      const b = t.add(0xf8).readPointer(), e = t.add(0x100).readPointer();
+      const n = Math.min(64, Math.max(0, Math.floor(e.sub(b).toNumber() / 8)));
+      const parts = [];
+      for (let i = 0; i < n; i++) { const kv = b.add(i * 8); parts.push(kv.readU32().toString() + ':' + kv.add(4).readU32().toString()); }
+      tab = 'n=' + n + ' [' + parts.join(',') + ']';
+    } catch (e) { tab = 'ERR:' + String(e).slice(0, 40); }
+    send({ ev: 'mapping_in', arg0: t.toString(), fb: rd18(t, 0xe8), tab: tab });
+    this.t = t;
+  },
+  onLeave(ret) { send({ ev: 'mapping_out', ret: ret.toString() }); }
+});
+okAttach('sav_range2', '0x1423d86e0', { onLeave(ret) { send({ ev: 'sav_range', ret: ret.toString() }); } });
+okAttach('ebx_in', '0x14140e3cf', { onEnter(args) { send({ ev: 'ebx_in', ebx: (this.context.rbx.toNumber() & 0xffffffff).toString() }); } });
+okAttach('ebx_out', '0x14140e3d2', { onEnter(args) { send({ ev: 'ebx_out', ebx: (this.context.rbx.toNumber() & 0xffffffff).toString() }); } });
+okAttach('rowapp2', '0x14140ea70', {
+  onEnter(args) {
+    let skill = 'ERR', P = 'ERR', Pd = 'ERR', nm = 'ERR';
+    try { const s = args[1].readPointer(); skill = s.toString(); P = rd18(s, 0x4f); Pd = rd18(ptr(P), 0); } catch (e) {}
+    try { nm = args[1].readPointer().readUtf8String(48) || ''; } catch (e) {}
+    try { if (nm === 'ERR' || !nm) nm = args[2].readUtf8String(48) || ''; } catch (e) {}
+    send({ ev: 'rowapp2', arg2: args[1].toString(), skill: skill, P: P, Pderef: Pd, name: nm, a2: args[2].toString(), a3: args[3].toString() });
+  }
+});
+okAttach('throw_probe', '0x142c14380', {
+  onEnter(args) {
+    let mem = 'ERR';
+    try { mem = hex18(ptr('0x13fff544a'), 16); } catch (e) { mem = 'UNREADABLE'; }
+    send({ ev: 'throw_probe', retaddr: this.returnAddress.toString(), rsp: this.context.rsp.toString(), rbp: this.context.rbp.toString(), mem13: mem });
+  }
+});
+send({ ev: 'v18_armed' });
