@@ -29,9 +29,9 @@ public class InstanceProtocolTests
     }
 
     [Fact]
-    public void Start_encryption_is_a_bare_0x0011()
+    public void Start_encryption_is_0x0011_plus_one_trailing_byte()
     {
-        Assert.Equal([0x00, 0x11], InstanceProtocol.StartEncryption());
+        Assert.Equal([0x00, 0x11, 0x00], InstanceProtocol.StartEncryption());
     }
 
     [Fact]

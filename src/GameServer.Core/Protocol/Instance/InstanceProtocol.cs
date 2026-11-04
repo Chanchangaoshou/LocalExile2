@@ -19,8 +19,12 @@ public static class InstanceProtocol
     /// The 0.5.5 client sends no realm byte (the PoE1 client's opening had one: 30 bytes).</summary>
     public const int OpeningLength = 29;
 
-    /// <summary>S→C 0x11 (no fields, class 0x14316c930): switches both directions to Salsa20.</summary>
-    public static byte[] StartEncryption() => new LoginWriter().U16(StartEncryptionId).ToArray();
+    /// <summary>S→C 0x11: switches both directions to Salsa20. On the 0.5.5 client the message carries ONE
+    /// trailing byte after the id (value 0; the dispatcher case ignores the body). Proven by Frida capture
+    /// 2026-11-04: with a bare 2-byte 0x11 the client consumed the first encrypted byte as that trailing
+    /// byte and decrypted the rest from keystream position 0, garbling every packet (the keystream itself
+    /// matched ours byte-exactly). The PoE1 client (doc 010) had no such byte.</summary>
+    public static byte[] StartEncryption() => new LoginWriter().U16(StartEncryptionId).U8(0).ToArray();
 
     /// <summary>
     /// S→C 0x21 (class 0x1435dcb80, write 0x1421a2da0; dispatcher case 10): enter the area. Two stash tab lists
