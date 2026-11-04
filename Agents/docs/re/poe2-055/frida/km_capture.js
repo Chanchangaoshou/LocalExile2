@@ -413,3 +413,30 @@ Interceptor.attach(at('0x141e72a00'), {
 });
 Interceptor.attach(at('0x141da37e0'), { onEnter(args) { send({ ev: 'ao_attach' }); } });
 send({ ev: 'v13_armed' });
+
+// ---- v14: row-zero underflow localization (evening11) ----
+function spanCur(p) { try { return p.add(0x10).readU64().toString(); } catch (e) { return 'ERR'; } }
+function deltaHook(name, va) {
+  Interceptor.attach(at(va), {
+    onEnter(args) { this.sp = args[1]; send({ ev: name + '_enter', cur: spanCur(args[1]) }); },
+    onLeave(ret) { send({ ev: name + '_leave', cur: spanCur(this.sp) }); }
+  });
+}
+deltaHook('rec', '0x142188D50');       // skill record reader: delta should be 77 with the fix
+deltaHook('skilltab', '0x14218A9D0');  // skill table reader: delta should be 84
+deltaHook('actor', '0x142147300');     // Actor reader: delta should be 117, must return
+Interceptor.attach(at('0x14218971f'), {
+  onEnter(args) {
+    const c = this.context; const regs = { rax: c.rax, rbx: c.rbx, rcx: c.rcx, rdx: c.rdx, rsi: c.rsi, rdi: c.rdi, r8: c.r8, r9: c.r9, r10: c.r10, r11: c.r11, r12: c.r12, r13: c.r13, r14: c.r14, r15: c.r15 };
+    const out = {};
+    for (const k in regs) { try { const q = regs[k].add(0x10d).readU64(); out[k] = '10d=' + q.toString(16); } catch (e) {} }
+    send({ ev: 'tail_gate', regs: out });
+  }
+});
+Interceptor.attach(at('0x141e71383'), {
+  onEnter(args) { send({ ev: 'tasks_read', rcx: spanCur(this.context.rcx), rdx: spanCur(this.context.rdx), rbx: spanCur(this.context.rbx), rsi: spanCur(this.context.rsi) }); }
+});
+Interceptor.attach(at('0x1421474df'), {
+  onEnter(args) { send({ ev: 'seg4_tail', rcx: spanCur(this.context.rcx), rdx: spanCur(this.context.rdx), rbx: spanCur(this.context.rbx), rsi: spanCur(this.context.rsi) }); }
+});
+send({ ev: 'v14_armed' });
