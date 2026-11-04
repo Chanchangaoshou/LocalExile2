@@ -39,7 +39,7 @@ public sealed class LoginServerSession(AccountService accounts)
         PlayRequest m => EnterGame(m),
         CreateCharacter m => Create(m),
         // Delete on the character screen, after its confirmation (0x140cfafa0): the character's name and a byte (0 live).
-        WStringU8Message { MessageId: DeleteCharacterId } m => Delete(m.Text),
+        DeleteCharacter m => Delete(m.Text),
         // "Leagues with progress" (0x140d166a0): the leagues a character could migrate progress from. None here; the
         // client then shows "There are no available leagues to migrate progress from."
         EmptyMessage { MessageId: 0x19 } => Session is null ? [] : [new LeaguesWithProgress(0, [])],
