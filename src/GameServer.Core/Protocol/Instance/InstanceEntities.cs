@@ -199,6 +199,20 @@ public static class InstanceEntities
     public static byte[] CreateObject(uint entityId, uint objectType, byte[] blob, uint headerU32 = 0, ushort headerU16 = 0) =>
         new LoginWriter().U16(CreateObjectId).U32(entityId).U32(headerU32).U16(headerU16).U32(objectType).Blob(blob).ToArray();
 
+    public const ushort CreateObject55Id = 0x2f7;
+
+    /// <summary>
+    /// S→C 0x2f7 in the 0.5.5 client (world group; class vtable 0x14350C4F0, read 0x141f6c5a0, write 0x141f6c540;
+    /// world dispatcher handler 0x142134ec7): create an object. Wire: the 11-byte world header (u32 entity id, then
+    /// the queue stamp u32 + u8 + u16, zero for a fresh world), the u32 object type hash (the handler looks it up
+    /// in the type registry and throws "Unknown object type serialized by server" when it is absent), then the
+    /// component blob as a compact-int length (<see cref="LoginWriter.VarintU"/>) + raw bytes. This replaces the
+    /// old build's 0x2b9 (10-byte header, u16 blob length), which the 0.5.5 factories do not create at all.
+    /// </summary>
+    public static byte[] CreateObject55(uint entityId, uint objectType, byte[] blob) =>
+        new LoginWriter().U16(CreateObject55Id).U32(entityId).U32(0).U8(0).U16(0)
+            .U32(objectType).VarintU((uint)blob.Length).Bytes(blob).ToArray();
+
     public const ushort MonsterTypesId = 0x20;
 
     /// <summary>

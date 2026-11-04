@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 
 namespace GameServer.Data.Terrain.Generation;
 
-/// <summary>The "Tile hash" the client logs after generating an area and sends in C→S 0x7d (<c>0x141d8a460</c>,
+/// <summary>The "Tile hash" the client logs after generating an area and sends in C→S 0x9a (<c>0x141d8a460</c>,
 /// Agents/docs/re/011-level-generation.md §6). Equal hashes mean the same tiles in the same places.</summary>
 public static class TileHash
 {

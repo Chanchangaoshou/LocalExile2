@@ -59,7 +59,7 @@ public static class InstanceProtocol
 
     public static byte[] WeaponSet(bool second) => new LoginWriter().U16(WeaponSetId).U8((byte)(second ? 1 : 0)).ToArray();
 
-    public const ushort TickId = 0x1c, PongId = 0x1d, AreaGeneratedId = 0x7d;
+    public const ushort TickId = 0x1c, PongId = 0x1d, AreaGeneratedId = 0x9a;
 
     /// <summary>
     /// S→C 0x1d in the 0.5.5 client (class vtable 0x14350af18, read 0x141f48de0; dispatcher case at 0x142122295):
@@ -75,17 +75,18 @@ public static class InstanceProtocol
         new LoginWriter().U16(PongId).U16(serverDelayMs).U16(ackIndex).U32(sideChannel).ToArray();
 
     /// <summary>Encrypted C→S messages whose length is known: 0x1c tick (u32 counter + u8; 7 in all, sent every
-    /// 100–500 ms in state 3 by 0x142148880) and 0x7d area generated (two u32 hashes; 10 in all).</summary>
+    /// 100–500 ms in state 3 by 0x142148880) and 0x9a area generated (u8 + two u32 hashes; 11 in all, live
+    /// capture 2026-11-04 14:40).</summary>
     public const ushort UseSkillAtLocationId = 0x25, ActionStartedId = 0x1ab;
 
-    /// <summary>Encrypted C→S messages whose length is known (live captures 2026-10-16): 0x1c tick, 0x7d area generated,
+    /// <summary>Encrypted C→S messages whose length is known (live captures 2026-10-16): 0x1c tick, 0x9a area generated,
     /// 0x25 use skill at location (16), 0x015a and 0x01ef (id only). 0x0099 is 4 bytes (class 0x1435c0258, write
     /// 0x141f95200: two u8, meaning unknown), sent after entering an area together with the chat channel joins
     /// (<see cref="InstanceChat.JoinChannelId"/>) and 0x0129 (id only); the 20 bytes once taken for 0x0099 were all four.</summary>
     public static int? KnownClientLength(ushort id) => id switch
     {
         InstanceDelve.UpgradesRequestId => 2, InstanceDelve.UpgradeId => 4, InstanceDelve.PurchaseId => 4,
-        TickId => 7, AreaGeneratedId => 10, UseSkillAtLocationId => 16, 0x015a => 2, 0x01ef => 2, 0x0099 => 4, 0x0129 => 2,
+        TickId => 7, AreaGeneratedId => 11, UseSkillAtLocationId => 16, 0x015a => 2, 0x01ef => 2, 0x0099 => 4, 0x0129 => 2,
         // Primary 3.29.3b writers: 0x140e29080 (u16 + u8), 0x141f935a0 (u16 + 4/2/2/4/1/1 bytes).
         0x020a => 3, 0x0059 => 16, InstanceSocial.TradeRequestId => InstanceSocial.TradeRequestLength,
         InstanceSocial.TradeRequestAcceptId => InstanceSocial.TradeRequestAcceptLength,

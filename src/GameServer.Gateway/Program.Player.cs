@@ -872,6 +872,20 @@ partial class Program
         }
     }
 
+    // The 0.5.5 spawn: send only the world CreateObject (0x2f7) for the player. World activation is
+    // client-side in 0.5.5 and there is no SetLocalPlayer message; see INSTANCE-RE-NOTES 2026-11-04.
+    static async Task SendPlayerObject55(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn)
+    {
+        var cls = SkillsFor(conn).ClassFor(conn.ClassRow);
+        conn.PeerType = InstanceEntities.ObjectTypeHash(cls.ObjectType);
+        var player = PlayerForCreation(conn);
+        conn.PeerTemplate = player;
+        conn.ClientSkillIds = [.. player.Skills!.Select(s => s.Id)];
+        conn.PlayerObjectCreated = true;
+        await Send(remote, stream, ciphers, InstanceEntities.CreateObject55(PlayerId, conn.PeerType, player.Blob()),
+            $"0x02f7 create current player (type 0x{conn.PeerType:x8}, blob {player.Blob().Length} B)");
+    }
+
     static async Task SendPlayer(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn)
     {
         RestoreFortification(conn);

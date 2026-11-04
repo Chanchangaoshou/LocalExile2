@@ -4,6 +4,16 @@ namespace GameServer.Core.Tests;
 
 public class InstanceEntitiesTests
 {
+
+    [Fact]
+    public void CreateObject55_uses_the_0x5_5_world_header_and_varint_blob_length()
+    {
+        byte[] blob = new byte[167];
+        byte[] packet = InstanceEntities.CreateObject55(0x1000, 0xa7000ea0, blob);
+        Assert.Equal(2 + 11 + 4 + 2 + blob.Length, packet.Length);
+        Assert.Equal("02F7" + "00001000" + "00000000" + "00" + "0000" + "A7000EA0" + "80A7",
+            Convert.ToHexString(packet[..19]));
+    }
     [Fact]
     public void Projectile_impact_teleport_carries_height_and_preserves_the_legacy_default()
     {

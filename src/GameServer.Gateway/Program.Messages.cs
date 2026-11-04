@@ -605,94 +605,18 @@ partial class Program
                 Console.WriteLine($"[gateway] {remote} <= 0x0080 add friend \"{InstanceSocial.ReadFriendAdd(bytes).Name}\" (not handled yet)");
             else if (id == InstanceProtocol.AreaGeneratedId)
             {
-                Console.WriteLine($"[gateway] {remote} <= 0x007d area generated: {Convert.ToHexString(bytes)}");
+                Console.WriteLine($"[gateway] {remote} <= 0x009a area generated: {Convert.ToHexString(bytes)}");
                 if (!conn.PlayerSent)
                 {
-                    // First visit with scripts/walkmaps running: the map is written while the client generates the area.
-                    if (conn.Layout.Walkable is null && await AreaLayouts.WaitFor(conn.Layout, conn.Seed) is { } fresh)
-                    {
-                        conn.Use(fresh);
-                        Console.WriteLine($"[gateway] {remote} walk map captured: {fresh.Describe()}");
-                    }
-                    if (conn.Layout.AreaTransitions.Length == 0 && await AreaLayouts.WaitForTransitions(conn.Layout, conn.Seed) is { } withTransitions)
-                    {
-                        conn.Use(withTransitions);
-                        Console.WriteLine($"[gateway] {remote} area transitions captured: {withTransitions.Describe()}");
-                    }
-                    // Waypoint travel: next to the destination's waypoint instead of the area's spawn. A generated area's
-                    // waypoint is only known from the walk-map recorder's capture for this seed (live.ps1 -Walkmaps).
-                    // Back through a town portal: where the portal stands (OpenTownPortal).
-                    if (conn.ArriveAt is var (sx, sy))
-                    {
-                        conn.Use(conn.Layout with { SpawnX = sx, SpawnY = sy });
-                        Console.WriteLine($"[gateway] {remote} back at the portal ({sx}, {sy})");
-                    }
-                    else if (conn.ArriveAtWaypoint && conn.Layout.Waypoint is { } arrival)
-                    {
-                        var (ax, ay) = conn.Layout.Near((arrival.GridX, arrival.GridY));
-                        conn.Use(conn.Layout with { SpawnX = ax, SpawnY = ay });
-                        Console.WriteLine($"[gateway] {remote} arrived by waypoint: spawn ({ax}, {ay}) next to the waypoint at ({arrival.GridX}, {arrival.GridY})");
-                    }
-                    // Otherwise next to the exit back; Resurrect at Checkpoint and the monster packs' clearance use it too.
-                    else if (conn.Layout.Arrival(conn.CameFrom) is var (ex, ey) && (ex, ey) != (conn.Layout.SpawnX, conn.Layout.SpawnY))
-                    {
-                        conn.Use(conn.Layout with { SpawnX = ex, SpawnY = ey });
-                        Console.WriteLine($"[gateway] {remote} arrival from 0x{conn.CameFrom:x4}: ({ex}, {ey})");
-                    }
-                    else if (conn.ArriveAtWaypoint)
-                        Console.WriteLine($"[gateway] {remote} arrived by waypoint, but {conn.Layout.Id} seed {conn.Seed} has no captured waypoint " +
-                            $"(run live.ps1 -Walkmaps): spawn ({conn.Layout.SpawnX}, {conn.Layout.SpawnY}){(conn.Layout.Walkable is null ? ", no walk map either: the player may stand outside the map" : "")}");
+                    // 0.5.5 spawn (INSTANCE-RE-NOTES 2026-11-04): after the client's 0x9a the only server
+                    // message is the world CreateObject for the player (0x2f7). World activation is
+                    // client-side; SetLocalPlayer, the old EnterArea, inventories, gold and the wake zone
+                    // have no 0.5.5 counterpart yet, and any id neither factory creates would leave the
+                    // encrypted stream misaligned, so the old SendPlayer sequence and the per-area loops
+                    // stay unused until each message is reversed.
                     RecordVisit(conn);
-                    await SendPlayer(remote, stream, ciphers, conn);
+                    await SendPlayerObject55(remote, stream, ciphers, conn);
                     conn.PlayerSent = true;
-                    await StartGracePeriod(remote, stream, ciphers, conn);
-                    await SendWaypoints(remote, stream, ciphers, conn);
-                    uint gold = PersonalStashOf(conn).Gold;
-                    await Send(remote, stream, ciphers, InstanceEntities.Gold(gold), $"0x02a9 gold: {gold} (account, {conn.League ?? "Standard"})");
-                    // The worn cosmetics (S→C 0x1f3): the client's worn table starts empty with every instance connection.
-                    await SendWornCosmetics(remote, stream, ciphers, conn, "entering the area");
-                    // The saved skill bar (S→C 0x53), right after the player and the area.
-                    await SendSkillBar(remote, stream, ciphers, conn);
-                    // The chat channels joined earlier in the session (Program.Chat.cs).
-                    await SendChatChannels(remote, stream, ciphers, conn);
-                    // The equipment again (S→C 0x02ba), as after an equip: the player object's own list does not set how a
-                    // two-handed weapon is held, the update does (live 2026-10-22: it was held one-handed after every load).
-                    await SendModel(remote, stream, ciphers, conn, Looks(conn, ItemsOf(conn)), "entering");
-                    await PopulateArea(remote, stream, ciphers, conn);
-                    await SpawnPets(remote, stream, ciphers, conn);
-                    await SendGroundItems(remote, stream, ciphers, conn);
-                    await PlaceStartWeapon(remote, stream, ciphers, conn);
-                    await SpawnTownNpcs(remote, stream, ciphers, conn);
-                    await SpawnTownStash(remote, stream, ciphers, conn);
-                    await SpawnDelveCrawler(remote, stream, ciphers, conn);
-                    await SpawnDelveGenerator(remote, stream, ciphers, conn);
-                    await SpawnQuestRoomObjects(remote, stream, ciphers, conn);
-                    await SpawnOpeningTutorial(remote, stream, ciphers, conn);
-                    await SpawnGlyphQuest(remote, stream, ciphers, conn);
-                    await SpawnHideoutDoodads(remote, stream, ciphers, conn);
-                    // All stationary objects must exist before validating the arrival cell.
-                    await PushOutOfCollision(remote, stream, ciphers, conn);
-                    await SpawnMapReturnPortal(remote, stream, ciphers, conn);
-                    await SpawnTownPortals(remote, stream, ciphers, conn);
-                    await conn.Commands!.Reply($"Area generated at Seed: {conn.Seed}");
-                    // An area the Gateway does not generate itself (ServerLevels) runs on the client's layout alone.
-                    if (!ServerLevels.IsSupported(conn.Layout.Id) && !CaptureTour.Active(CharacterName(conn)))
-                        await conn.Commands!.Reply(ServerLevels.UnsupportedMessage);
-                    await ServerMods.AreaGenerated(PlayerOf(conn));
-                    _ = RunMonsterRegeneration(remote, stream, ciphers, conn);
-                    _ = RunUniqueBeltEffects(remote, stream, ciphers, conn);
-                    await SyncQuestItems(remote, stream, ciphers, conn, removeItems: true);   // a1q5: the Medicine Chest's flag
-                    _ = RunMercyMission(remote, stream, ciphers, conn);
-                    _ = RunServerFrames(remote, stream, ciphers, conn);
-                    _ = RunMonsterAi(remote, stream, ciphers, conn);
-                    _ = ContinueTour(remote, stream, ciphers, conn);
-                    _ = RunLivingCollisions(remote, stream, ciphers, conn);
-                    _ = RunPlayerTick(remote, stream, ciphers, conn);
-                    _ = RunResourceRecovery(remote, stream, ciphers, conn);
-                    _ = RunCharges(remote, stream, ciphers, conn);
-                    _ = RunFortification(remote, stream, ciphers, conn);
-                    _ = RunRage(remote, stream, ciphers, conn);
-                    _ = RunFlaskChargeRegen(remote, stream, ciphers, conn);
                 }
             }
         }

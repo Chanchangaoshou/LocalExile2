@@ -20,7 +20,7 @@ using GameServer.Core.Diagnostics;
 // change (Agents/docs/protocol/02, 09).
 // Reads the plaintext opening (0x0F ticket + 0x0E hello), asks GameServer.Auth which area/instance the ticket belongs to
 // (InstanceControl "resolve"), answers 0x11 so both directions switch to Salsa20 keyed by the ticket's instance key,
-// sends the area (0x1e), answers the client's 0x7d with the player and the area's area transitions, and handles ticks,
+// sends the area (0x1e), answers the client's 0x9a with the player object (0x2f7), and handles ticks,
 // movement and area transition clicks (0x24: change area, or with Ctrl the instance chooser; Agents/docs/protocol/09-area-change.md).
 // Port: Game_GATEWAY_PORT (default 6112). Instance keys: data/instance-secret.bin (Game_INSTANCE_SECRET), shared with
 // GameServer.Auth. Auth control: 127.0.0.1:Game_AUTH_CONTROL_PORT (20495); without it every ticket gets Lioneye's Watch.
