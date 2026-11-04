@@ -225,6 +225,25 @@ public class LoginServerSessionTests
     }
 
     [Fact]
+    public void Create_character_with_a_poe2_start_state_lists_the_poe2_class_id()
+    {
+        var accounts = new AccountService(new JsonAccountStore());
+        var acc = accounts.Register("gus", "pw1234").Value!;
+        var session = new LoginServerSession(accounts);
+        session.Handle(Request("gus", "pw1234"));
+
+        // As the 0.5.5 client sends it: "IntFourbDefault" is the Sorceress start state. The stored class
+        // stays the archetype (Witch), but the list must carry the PoE2 client's IntegerId 7: its 3 is the
+        // Duelist, and 0 (what unrecorded characters send) is the Marauder it does not offer.
+        var replies = session.Handle(new CreateCharacter("GusSorceress", "Standard", 0, 0, 0, "IntFourbDefault", new byte[32]));
+        var e = Assert.Single(Assert.IsType<List15>(replies[0]).Entries);
+        Assert.Equal((ushort)7, e.Class);
+        var stored = Assert.Single(accounts.Characters(acc.Id));
+        Assert.Equal(CharacterClass.Witch, stored.Class);
+        Assert.Equal(7, stored.ClassId);
+    }
+
+    [Fact]
     public void Delete_character_removes_it_and_lists_the_rest()
     {
         var accounts = new AccountService(new JsonAccountStore());

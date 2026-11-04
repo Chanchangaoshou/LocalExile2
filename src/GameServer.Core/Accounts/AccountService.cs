@@ -132,7 +132,7 @@ public sealed class AccountService(IAccountStore store, TimeProvider? clock = nu
     public Character? FindCharacter(string name) => store.FindCharacter(name);
 
     /// <summary>Creates a level 1 character in <paramref name="inLeague"/> (default: the service's league).</summary>
-    public Result<Character> CreateCharacter(Guid accountId, string name, CharacterClass cls, string? inLeague = null)
+    public Result<Character> CreateCharacter(Guid accountId, string name, CharacterClass cls, string? inLeague = null, int classId = -1)
     {
         if (!ValidName(name, 3, 23)) return Result<Character>.Fail(AuthError.InvalidCharacterName);
         if (!Enum.IsDefined(cls)) return Result<Character>.Fail(AuthError.InvalidClass);
@@ -142,7 +142,7 @@ public sealed class AccountService(IAccountStore store, TimeProvider? clock = nu
             if (store.CharactersOf(accountId).Count >= maxCharacters) return Result<Character>.Fail(AuthError.LimitReached);
             if (store.FindCharacter(name) is not null) return Result<Character>.Fail(AuthError.CharacterNameTaken);
             var now = _clock.GetUtcNow();
-            var c = new Character(Guid.NewGuid(), accountId, name, cls, 1, inLeague ?? league, StartingArea, now, now);
+            var c = new Character(Guid.NewGuid(), accountId, name, cls, 1, inLeague ?? league, StartingArea, now, now, ClassId: classId);
             store.AddCharacter(c);
             return Result<Character>.Success(c);
         }

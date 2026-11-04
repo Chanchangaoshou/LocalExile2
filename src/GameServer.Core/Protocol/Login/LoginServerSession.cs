@@ -199,7 +199,7 @@ public sealed class LoginServerSession(AccountService accounts)
         string name = m.Name.Trim();
         if (name.Length < 3) return [new CreateCharacterResult(ResultCharacterNameTooShort, false, 0)];
         if (name.Length > 23) return [new CreateCharacterResult(ResultCharacterNameTooLong, false, 0)];
-        var r = accounts.CreateCharacter(Session.AccountId, name, cls, league.Name);
+        var r = accounts.CreateCharacter(Session.AccountId, name, cls, league.Name, ClassWireId(m) ?? -1);
         if (!r.Ok)
             return [new CreateCharacterResult(r.Error switch
             {
@@ -230,6 +230,24 @@ public sealed class LoginServerSession(AccountService accounts)
         ("DexInt", CharacterClass.Shadow), ("Str", CharacterClass.Marauder), ("Dex", CharacterClass.Ranger), ("Int", CharacterClass.Witch),
     ];
 
+    /// <summary>Start states of the PoE2 client (its Characters.datc64, 0.5.5, extracted 2026-11-04): the
+    /// short class id in S78 ("IntFourbDefault") → that client's Characters IntegerId. PoE2's table keeps the
+    /// PoE1 classes at 0–5 (StrFour = Marauder … StrIntFour = Templar) and adds its own at 6–11 (StrFourb =
+    /// Warrior, IntFourb = Sorceress, DexFourb = Huntress, StrDexFourb = Mercenary, DexIntFourb = Monk,
+    /// StrIntFourb = Druid). The 0x15 class field is read in THIS numbering: a Sorceress must list as 7 — the
+    /// server enum's Witch (3) is the Duelist to that client, and its 0 is the Marauder, a class PoE2 does
+    /// not offer.</summary>
+    private static readonly Dictionary<string, int> StartStateWireIds = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["StrFour"] = 0, ["IntFour"] = 1, ["DexFour"] = 2, ["StrDexFour"] = 3, ["DexIntFour"] = 4, ["StrIntFour"] = 5,
+        ["StrFourb"] = 6, ["IntFourb"] = 7, ["DexFourb"] = 8, ["StrDexFourb"] = 9, ["DexIntFourb"] = 10, ["StrIntFourb"] = 11,
+    };
+
+    /// <summary>The creating client's own class number for a 0x12 request (PoE2 start states), if it sent one.</summary>
+    public static int? ClassWireId(CreateCharacter m) =>
+        m.S78.EndsWith("Default", StringComparison.Ordinal) &&
+        StartStateWireIds.TryGetValue(m.S78[..^"Default".Length], out var id) ? id : null;
+
     /// <summary>The class of a 0x12 request. S78 is the chosen CharacterStartStates.dat Id ("DexDefault" for a Ranger,
     /// live 2026-10-18; the u32s were 0); a Characters.dat Id or class name is accepted too, then a class number.</summary>
     public static CharacterClass? ClassOf(CreateCharacter m)
@@ -245,15 +263,18 @@ public sealed class LoginServerSession(AccountService accounts)
 
     /// <summary>
     /// The account's characters as 0x15 entries. Mapped live (2026-10-16) with one probe character per field set to 3:
-    /// +0x48 is the level ("Level 3"), +0x4a the class (3 showed "Witch"; our enum has the same order with Scion = 0),
-    /// +0x44 / +0x46 change the portrait, +0x49 adds a red marker. The others showed no visible change. In the 0.5.5
-    /// layout level and class are u16 at the same offsets; the +0x49 marker's new home is unknown, so the dead
-    /// marker is NOT sent yet (a dead hardcore character would list as alive — revisit before delete/resurrect work).
+    /// +0x48 is the level ("Level 3"), +0x4a the class (3 showed "Witch" on the PoE1 client, whose Characters
+    /// numbering the server enum matches with Scion = 0), +0x44 / +0x46 change the portrait, +0x49 adds a red
+    /// marker. The others showed no visible change. In the 0.5.5 layout level and class are u16 at the same
+    /// offsets; the class is sent in the CREATING client's numbering (<see cref="Character.ClassId"/>) when it
+    /// was recorded — the PoE2 client's differs from the enum (see <see cref="StartStateWireIds"/>). The +0x49
+    /// marker's new home is unknown, so the dead marker is NOT sent yet (a dead hardcore character would list
+    /// as alive — revisit before delete/resurrect work).
     /// </summary>
     private ListEntry15[] CharacterEntries() =>
         Session is null ? [] :
         [.. accounts.Characters(Session.AccountId).Select(c =>
             // U46 (+0x46) is the portrait variation the character screen draws (0x14082e210 → 0x142426b00).
             new ListEntry15(c.Name, c.League, 0, 0, 0, 0, 0, 0, c.Portrait,
-                (ushort)Math.Clamp(c.Level, 0, 65535), (ushort)c.Class, 0, 0))];
+                (ushort)Math.Clamp(c.Level, 0, 65535), (ushort)(c.ClassId >= 0 ? c.ClassId : (int)c.Class), 0, 0))];
 }

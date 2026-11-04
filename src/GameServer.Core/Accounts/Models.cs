@@ -11,12 +11,16 @@ public enum CharacterClass { Scion, Marauder, Ranger, Witch, Duelist, Templar, S
 /// <param name="LastTown">WorldAreas Id of the last town the character entered (Auth records it when the Gateway resolves
 /// a town ticket). Every official login starts there, as in the real game; null = never entered a town, which logs in at
 /// <see cref="AccountService.StartingArea"/>.</param>
+/// <param name="ClassId">The creating client's Characters.dat IntegerId for this character's class, when it
+/// differs from the server enum's numbering (the PoE2 client: Witch = 1, Sorceress = 7, Warrior = 6, …);
+/// -1 = not recorded, the list falls back to <see cref="CharacterClass"/>. The 0x15 class field is read in
+/// the client's numbering, so this is what the character list sends.</param>
 /// <param name="Portrait">The worn portrait (a MicrotransactionCharacterPortraitVariations variation, 0 = the class's):
 /// the character list shows it (the Gateway reports picks with "set_portrait").</param>
 public sealed record Character(
     Guid Id, Guid AccountId, string Name, CharacterClass Class, int Level,
     string League, string AreaId, DateTimeOffset CreatedUtc, DateTimeOffset LastPlayedUtc, string? LastTown = null,
-    ushort Portrait = 0, HardcoreDeathRecord? HardcoreDeath = null);
+    ushort Portrait = 0, HardcoreDeathRecord? HardcoreDeath = null, int ClassId = -1);
 
 /// <summary>A committed Hardcore death. The source league is retained after migration; Ruthless deaths are terminal.
 /// Stored with the account's character record, separately from mutable inventory/progress saves.</summary>
