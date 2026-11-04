@@ -132,7 +132,7 @@ public class LoginServerSessionTests
         Assert.Equal(("CarolWitch", "Standard", (ushort)1, (ushort)CharacterClass.Witch), (e.Name, e.Text, e.Level, e.Class));
 
         var info = Assert.IsType<InstanceInfo>(Assert.Single(session.Handle(new PlayRequest(0, 0, new byte[8]))));
-        Assert.Equal(("127.0.0.1", (ushort)6112, (ushort)0x235c), (info.Host, info.U16_30, info.AreaHash));
+        Assert.Equal(("127.0.0.1", (ushort)6112, (ushort)0x0f14), (info.Host, info.U16_30, info.AreaHash));
 
         // Every reply survives the S→C codec.
         var all = login.Concat([list, info]).ToList();
@@ -145,7 +145,7 @@ public class LoginServerSessionTests
     {
         var accounts = new AccountService(new JsonAccountStore());
         accounts.Register("dave", "pw1234");
-        var session = new LoginServerSession(accounts);
+        var session = new LoginServerSession(accounts) { Leagues = new LeagueCatalog(["Standard", "Allflame"]) };
         var leagues = Assert.IsType<LeagueList>(session.Handle(Request("dave", "pw1234"))[1]).Leagues;
         Assert.Equal(16, leagues.Count);
         Assert.All(leagues, l => Assert.NotEmpty(l.Description)); // an empty one crashes the client's league card
@@ -159,14 +159,14 @@ public class LoginServerSessionTests
     }
 
     [Theory]
-    [InlineData("Allflame", false, false, false)]
+    [InlineData("Standard", false, false, false)]
     public void Saved_default_family_modes_resolve_when_the_creation_catalog_is_narrowed(
         string leagueName, bool hardcore, bool ssf, bool ruthless)
     {
         var accounts = new AccountService(new JsonAccountStore());
         var account = accounts.Register("legacy", "pw1234").Value!;
         accounts.CreateCharacter(account.Id, "LegacyRanger", CharacterClass.Ranger, leagueName);
-        var session = new LoginServerSession(accounts) { Leagues = new([LeagueCatalog.Standard]) };
+        var session = new LoginServerSession(accounts) { Leagues = new(["Configured"]) };
         var offered = Assert.IsType<LeagueList>(session.Handle(Request("legacy", "pw1234"))[1]);
         Assert.DoesNotContain(offered.Leagues, l => l.Name == leagueName);
         Assert.Null(session.Leagues.Find(leagueName));
