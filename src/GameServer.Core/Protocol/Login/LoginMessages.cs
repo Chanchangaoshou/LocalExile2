@@ -62,6 +62,12 @@ public sealed record WStringU8Message(ushort MessageId, string Text, byte Value)
 {
     public void WriteFields(LoginWriter w) => w.WStr(Text).U8(Value);
     internal static WStringU8Message Read(ushort id, ref LoginReader r) => new(id, r.WStr(), r.U8());
+
+    /// <summary>C→S 0x0c in the 0.5.5 client: the byte is the deleted character's list index and a trailing
+    /// u32 (0 in both live captures, 2026-11-04) follows it. Not consuming the u32 desynchronises the stream:
+    /// the decoder then meets id 0x0000 and every later message on the connection goes undecoded (a create
+    /// character request was lost this way).</summary>
+    internal static WStringU8Message ReadDelete(ushort id, ref LoginReader r) { var m = Read(id, ref r); r.U32(); return m; }
 }
 
 // ---------------------------------------------------------------- server → client
@@ -509,7 +515,7 @@ public static class LoginCodec
     {
         [0x01] = ReadEmpty, [0x02] = ReadKeyExchange, [0x03] = AccountLogin.Read, [0x05] = TokenLogin.Read,
         [0x06] = TicketLogin.Read, [0x07] = TicketLogin.Read, [0x08] = U32Raw64.Read, [0x0a] = TwoDigests.Read,
-        [0x0c] = WStringU8Message.Read, [0x0e] = PlayRequest.Read, [0x10] = CharacterSelected.Read, [0x12] = CreateCharacter.Read,
+        [0x0c] = WStringU8Message.ReadDelete, [0x0e] = PlayRequest.Read, [0x10] = CharacterSelected.Read, [0x12] = CreateCharacter.Read,
         [0x18] = CharacterListRequest.Read, [0x19] = ReadEmpty, [0x1c] = TwoU16.Read, [0x21] = ReadEmpty, [0x22] = HexCode.Read,
         [0x23] = ReadEmpty, [0x2a] = WStringU8Message.Read, [0x2b] = WStringU8Message.Read, [0x2c] = EpicLogin.Read,
         [0x39] = ReadEmpty, [0x3a] = U8Message.Read, [0x3d] = TwoWStringsBool.Read,
