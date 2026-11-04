@@ -178,16 +178,20 @@ partial class Program
                     AchievementSets: layout.Id is "Delve_Hub" or "Delve_Main" ? [2] : null);
                 // 0.5.5: the instance identity (0x28) precedes the area — its handler sets the session's
                 // identified flag ([session+0x2270]); the client's own fallback default is (0xf, "").
-                await Send(remote, stream, ciphers, InstanceProtocol.Identity((ushort)instanceId, ""),
-                    $"0x0028 instance identity (key {instanceId})");
+                // The name must be the account name, NOT empty: with "" the 2026-11-04 16:25 live session
+                // disconnected 35 ms after the area packet with the client's account-name validation
+                // error ("account length must be more than 3 characters, [A-Za-z0-9_]") — the only such
+                // line in the whole day's Client.txt — and never sent the 0x9a area-generated reply that
+                // every pre-0x28 session sent. (SOLUTION-PLAN-2026-11-04 §2, regression from e0f85f5.)
+                string identityName = conn.Account ?? conn.Character ?? "";
+                await Send(remote, stream, ciphers, InstanceProtocol.Identity((ushort)instanceId, identityName),
+                    $"0x0028 instance identity (key {instanceId}, name \"{identityName}\")");
                 await Send(remote, stream, ciphers, area.Encode(), $"0x001e {area}; ascendancy family {conn.MainAscendancy.Selection?.Family}");
-                // 0.5.5: the content/state application (0x23) follows the area. Evening4 RE: its handler
-                // calls the world aggregate's main-vtable slot +0x1f0, which activates the world; the
-                // compact-int value is a plain field whose known consumer clamps the render resolution
-                // scale by value/1000. Content() sends the neutral value 1000 (the value-0 form fired
-                // the activation in the 2026-11-04 16:16 session but crashed the client during area
-                // generation, consistent with the scale being clamped to 0).
-                await Send(remote, stream, ciphers, InstanceProtocol.Content(), "0x0023 content/state (value 1000)");
+                // 0.5.5: the content/state application (0x23) is NOT sent here. Sequencing per
+                // SOLUTION-PLAN-2026-11-04: S1 isolates the 0x28 identity-name fix on the pre-0x28
+                // baseline (0x11 + 0x28 + 0x1e,判据 = the 0x9a reply returns); S2 then sends 0x23 only
+                // after the client's 0x9a, behind the queued 0x2f7 CreateObject, with the neutral
+                // value 1000 (evening4: value/1000 clamps the render resolution scale).
                 if (level != resolved.Level)
                 {
                     // The saved experience is the character's level: Auth's (the ticket's) was not updated at the last level-up.
