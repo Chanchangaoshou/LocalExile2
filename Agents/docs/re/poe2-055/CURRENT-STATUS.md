@@ -59,8 +59,19 @@ same commit.
    deployed (c22749f: Positioned 19 B; Stats = fork pair stream +
    6x0 gate + u32/u8/u8 tail; Core 424/424), and probe **v12** dumps
    the full component table at fn C entry plus per-component
-   consumption. One more enter either stands the player in the
-   Riverbank or measures every remaining component (idx >= 2).
+   consumption. The follow-up enter (18:25) measured the rest: Stats read fully
+   (605 B), Pathfinding 0, Buffs 2 - then Life's 0.5.5 reader consumed
+   125 B against the fork's 55 and the Player reader threw on the
+   70-byte misalignment (client crash, area rendered, no model).
+   Evening9 then derived ALL remaining components statically, and
+   **blob v3 is deployed** (c5f31b1 + 4ad3d64, Core 424/424): Life in
+   the 125 B A/B/C layout, Player's five field fixes, Inventories
+   3-byte item tails, Actor rewritten (40 B empty form, creation
+   skill table with u32-id records), and blob flags bit1 set for the
+   entity-graph registration the model display needs. Probe v13
+   watches the CreateObject handler, world registration and the AO
+   attach. Next enter is the acceptance test: no crash, the witch
+   model standing at the spawn, controllable.
 2. **Class fingerprint (problem 2)**: at the character-select screen,
    note which class the throwaway character **bbbbbb** displays.
    (bbbbbb was deleted by the user on 2026-11-04 14:08 and has been

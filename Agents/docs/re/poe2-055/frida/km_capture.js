@@ -401,3 +401,15 @@ Interceptor.attach(at('0x142181160'), {
   }
 });
 send({ ev: 'v12_armed' });
+
+// ---- v13: registration + model attach watch (evening9 section 10) ----
+Interceptor.attach(at('0x142134ec7'), { onEnter(args) { send({ ev: 'createobj_handler' }); } });
+Interceptor.attach(at('0x141e72a00'), {
+  onEnter(args) {
+    let id = null, f8d = null;
+    try { const ent = this.context.rdx; id = ent.add(0x88).readU32(); f8d = ent.add(0x8d).readU8(); } catch (e) {}
+    send({ ev: 'world_register', id, f8d });
+  }
+});
+Interceptor.attach(at('0x141da37e0'), { onEnter(args) { send({ ev: 'ao_attach' }); } });
+send({ ev: 'v13_armed' });
