@@ -79,16 +79,17 @@ public class InstanceEntitiesTests
         string hex = Convert.ToHexString(b);
         string pool(uint v) => Convert.ToHexString(BitConverter.GetBytes(v)) + "00000000" + "0000" + "00000000" + "00000000"; // current, reserved 0
         string expected =
-            "00" + "00" +                                                     // flags, base data
+            "02" + "00" +                                                     // flags (bit1: entity-graph registration), base data
             "73000000" + "45000000" + "00000000" + "0000" + "00" + "02" + "00" + "0001" + // Positioned 0.5.5: flagsA 0, flagsB 0x02, flagsC 0, not hidden, shown
             "00" + "000000000000" + "00000000" + "00" + "00" +                 // Stats 0.5.5: no pairs, empty gate section, u32+u8+u8 tail
-            "0000" +                                                          // comp3
-            pool(50) + pool(40) + pool(0) + "00" +                            // Life
+            "0000" +                                                          // Buffs (empty)
+            pool(50) + "0000000000000000000000000000" + pool(40) + "0000000000000000000000000000" +
+            pool(0) + pool(0) + "000000000000000000000000000000000000" + "000000000000" + "00" + // Life 0.5.5: A B A B A A C x3 C flags
             "00" +                                                            // Animated
-            "02000000" + "41006200" + "01" + "00000000" + "00000000" + "0000" + "0000" + "0000" + "0000" +
-            "000000000000000000" + "0000" + "0000" + "00" + "0000000000" + "00000000" + "00" + // Player
+            "02000000" + "41006200" + "01" + "00000000" + "00000000" + "00000000" + "0000" + "0000" + "0000" + "0000" +
+            "0000000000" + "0000" + "0000" + "00" + "00" + "00" + "00" + "00" + // Player 0.5.5
             "0000" +                                                          // Inventories
-            "00000000" + "0000" + "00" + "00000000" + "00000000" + "0000" +    // comp9
+            "0000000000" + "0000000000" + "0000000000" + "0000000000" + "0000000000" + "0000000000" + "0000000000" + "0000000000" + // Actor 0.5.5 (empty, 40 bytes)
             "00";                                                             // tasks
         Assert.Equal(expected, hex);
     }
@@ -113,14 +114,16 @@ public class InstanceEntitiesTests
             Skills: [new GrantedSkill(0x0102, 4474, 4430, stats)], Stats: stats).Blob();
         string hex = Convert.ToHexString(b);
         const string statList = "02" + "8142" + "8341" + "8117" + "02";       // compact: count, key 0x142 = 833, key 0x117 = 2
-        Assert.StartsWith("0000" + "73000000" + "45000000" + "00000000" + "0000" + "00" + "02" + "00" + "0001" + // flags, base, Positioned 0.5.5
+        Assert.StartsWith("0200" + "73000000" + "45000000" + "00000000" + "0000" + "00" + "02" + "00" + "0001" + // flags, base, Positioned 0.5.5
             statList + "000000000000" + "00000000" + "00" + "00", hex);       // Stats 0.5.5: pairs, empty gate section, u32+u8+u8 tail
         string actor =
-            "00000000" + "0000" + "00" + "00000000" + "00000000" +           // Actor main body
-            "4000" +                                                          // slot 20: f0 0x40 = skill list
-            "01" + "0201" + "00" + "7A110000" + "00" + "4E110000" +          // 1 skill: id 0x102, GEPL ref (u8, row 4474, stat set u8, row 4430)
+            "000000000000" + "000000000000" + "000000000000" +                // three empty (u8, u8, string) slots
+            "00" +                                                            // F2nd
+            "01" + "02010000" + "00" + "00" + "7A110000" + "00" + "4E110000" + // 1 skill: u32 id 0x102, selector, GEPL ref (u8, row 4474), stat-set ref (u8, row 4430)
             "00" + "00" + "00000000" + "00000000" + "00000000" + "00" + statList + // flags, supports, 3 × u32, u8, stats
-            "00" + "00000000";                                                // no (row, u32, u32) entries, no u32-counted list
+            "00" + "00" + "00000000" +                                        // no soul budgets, empty byte table, no cooldown groups
+            "00" + "00" + "00" + "0000" + "00" +                              // F0, F1, F2, u16, u8
+            "00000000" + "00000000";                                          // four gated entries (flags 0), u32
         Assert.EndsWith(actor + "00", hex);                                   // then tasks
     }
 

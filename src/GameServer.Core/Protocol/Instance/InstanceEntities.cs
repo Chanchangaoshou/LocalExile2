@@ -933,7 +933,9 @@ public sealed record PlayerObject(string Name, byte ClassIndex, int GridX, int G
     public byte[] Blob()
     {
         var w = new BlobWriter();
-        w.U8(0);            // object flags (0x141ebe190: bit0 → +0x8c|0x80, bit1 → +0x8d|2)
+        w.U8(0x02);         // object flags: bit1 → [entity+0x8d]|4, the gate for CreateObject registering the
+                            // entity into the world entity graph in 0.5.5 (evening9 §10; the alternative is a
+                            // follow-up world 0x1c6, which does the same registration)
         w.U8(0);            // base data entry count (0x141dea920)
         // Positioned in 0.5.5 (read 0x141dd89a0, vtable 0x1434d24f8): x, y, u32, u16 team, then THREE flag bytes
         // (flagsA, flagsB, flagsC). The definition-gated Sector prefix is off for IntFour ([def+0x29] = 0). flagsB
@@ -948,9 +950,12 @@ public sealed record PlayerObject(string Name, byte ClassIndex, int GridX, int G
         w.Stats(Stats).U8(0).U8(0).U8(0).U8(0).U8(0).U8(0).U32(0).U8(0).U8(0);
         // comp3 (0x141e114d0): u16 count of entries (u16, u8, 0x141e06bb0 record).
         w.U16(0);
-        // Life (0x141e6c2f0): life, mana and energy shield pools (0x141e6be70), then a flags byte (0x141e6c270).
-        Pool(w, Life); Pool(w, Mana, ManaReserved); Pool(w, EnergyShield);
-        w.U8(0);
+        // Life in 0.5.5 (read 0x141d8c260) is nine sub-reads, 125 bytes: pool-shaped A (18 B, the fork's Pool
+        // layout byte for byte), short pool B (14), A, B, A, A, three C (u32 + i16, 6 B each), one C and a flags
+        // byte. Which A slot is life/mana/shield/spirit is not yet live-verified; the order below follows the old
+        // build's pool order.
+        Pool(w, Life); w.Zeros(14); Pool(w, Mana, ManaReserved); w.Zeros(14); Pool(w, EnergyShield); Pool(w, 0);
+        w.Zeros(18).Zeros(6).U8(0);
         // Animated (0x141e56a80): flags. Bit0 + !bit1: u32 char count + UTF-16LE animated-object path; the client loads it
         // when it differs from the current one or none is set (+0x260 null), creating the 0x308-byte AO instance.
         if (AnimatedObject is null) w.U8(0);
@@ -959,32 +964,31 @@ public sealed record PlayerObject(string Name, byte ClassIndex, int GridX, int G
         w.WStr32(Name)
          .U8(ClassIndex)     // Characters.dat row; bit5 and bits6-7 are the ascendancy (0x142156d80)
          .U32(Experience)    // 0x141e7f6b0 → +0x18c; the level is derived from it (+0x1ac)
-         .U32(0).U16(0)
-         .U16(Portrait)      // +0x1aa: the portrait variation (MicrotransactionCharacterPortraitVariations __col1, 0 = the class's)
+         .U32(0).U32(0).U16(0)
+         .U16(Portrait)      // +0x202 in 0.5.5 (read 0x141dcf4a0): the portrait variation (0 = the class's)
          ;
         WriteFlagSet(w, QuestFlags);   // the quest flags (+0x1b8, 0x141e83340)
         // The league quest flags (+0x1d0, same layout; WorldAreas __col60 values − 1): bit = id − 1 of the client's built-in
         // name table (0x142fca900), e.g. UnlockedMapDevice 350 → bit 349, which the map device's Targetable requires (21-hideouts.md §1).
         WriteFlagSet(w, LeagueQuestFlags);
         w
-         .Zeros(9)           // raw +0x1e8
+         .Zeros(5)           // raw block → +0x278 (read_exact 5 in 0.5.5)
          .U16(Hideout).U16(Hideout2)   // Hideouts.dat keys (HASH16; 0 finds no row): the character's hideout (21-hideouts.md §1)
          .U8(0)              // +0x1b1 (non-zero → "WashedUp" state)
-         .U8(0).U8(0).U8(0).U8(0).U8(0)
-         .U32(0)             // u32 count + u32 list (vtable +0x158)
-         .U8(0);             // microtransaction counters (0x141e83470)
-        WriteInventories(w, Equipped);   // Inventories (0x141e1ee30): what the model wears
-        // comp9 = Actor (0x142192a80): u32-counted UTF-16 string, u16 +0x21c, u8; two more u8 (+0x230, +0x234) only
-        // when a runtime value is < 1 (false here: traced live, comp9 read 15 bytes); u32 +0x26c, u32 +0x274; then its
-        // vtable+0xa0 reader 0x1421932b0: two flag bytes. f0 0x40 = the skill list (0x142197b10); the rest stay off.
-        w.WStr32("").U16(0).U8(0).U32(0).U32(0);
-        if (Skills is { Count: > 0 } || Souls is { Count: > 0 })
-        {
-            w.U8(0x40).U8(0);
-            WriteSkillList(w, Skills ?? [], Souls);
-        }
-        else w.U8(0).U8(0);
-        w.U8(0);            // tasks (0x141ee00f0)
+         .U8(0).U8(0)        // +0x205, +0x3e7
+         .CompactU(0)        // id list: compact count × u32 (empty)
+         .U8(0);             // tail table (0x141deecb0): u8 count × (u32 key, u32) (empty)
+        WriteInventories(w, Equipped);   // Inventories in 0.5.5 (read 0x141d82bc0 via the +0xb0 slot)
+        // Actor in 0.5.5 (main reader 0x142147300): three (u8, u8, string) slots, a flags byte F2nd, the skill
+        // table (read unconditionally in creation mode), flag bytes F0/F1/F2 with a u16 and a u8, four gated
+        // entries and a u32. The F0/F1/F2-gated sections stay off; the sibling-Life-gated 7 bytes inside the F0
+        // section are skipped at full life (assumed; RE notes evening9 section 8 lists it as an open check).
+        for (int i = 0; i < 3; i++) w.U8(0).U8(0).WStr32("");
+        w.U8(0);            // F2nd: no gated sub-reads
+        WriteActorSkillTable(w, Skills ?? [], Souls);
+        w.U8(0).U8(0).U8(0).U16(0).U8(0);   // F0, F1, F2, +0x2b2, +0x2a3
+        w.U8(0).U8(0).U8(0).U8(0).U32(0);   // four entries (flags 0) and +0x4bc
+        w.U8(0);            // tasks
         return w.ToArray();
     }
 
@@ -1007,6 +1011,19 @@ public sealed record PlayerObject(string Name, byte ClassIndex, int GridX, int G
         w.U32(0);
     }
 
+    /// <summary>The Actor skill table as the 0.5.5 creation reader (0x14218a9d0) reads it: u8 skill count x
+    /// record, u8 soul-budget count x (u32, u32, u32), a u8-counted byte table the old build did not have, and
+    /// a u32 cooldown-group count (each group would add a key, a count and that many 16-byte entries).</summary>
+    internal static void WriteActorSkillTable(BlobWriter w, IReadOnlyList<GrantedSkill> skills,
+        IReadOnlyList<VaalSoulBudget>? souls = null)
+    {
+        w.U8((byte)skills.Count);
+        foreach (var s in skills) WriteSkillRecord(w, s);
+        WriteSoulBudgets(w, souls);
+        w.U8(0);            // byte table (empty)
+        w.U32(0);           // cooldown groups (none)
+    }
+
     internal static void WriteSoulBudgets(BlobWriter w, IReadOnlyList<VaalSoulBudget>? souls)
     {
         w.U8(checked((byte)(souls?.Count ?? 0)));
@@ -1016,7 +1033,7 @@ public sealed record PlayerObject(string Name, byte ClassIndex, int GridX, int G
     /// <summary>One skill record (<c>0x142196ce0</c>), as the 0x40 list and the 0x20 update carry it.</summary>
     internal static void WriteSkillRecord(BlobWriter w, GrantedSkill s)
     {
-        w.U16(s.Id)
+        w.U32(s.Id).U8(0)                      // id (u32 in 0.5.5) and a selector byte
          .U8(0).U32(s.EffectsPerLevelRow)      // GEPL reference
          .U8(0).U32(s.StatSetsPerLevelRow);    // its stat set
         foreach (var (row, _) in s.ExtraStatSets) w.U8(0).U32(row);   // one more stat-set reference per additional set

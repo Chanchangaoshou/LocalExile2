@@ -298,7 +298,7 @@ public class InstanceItemsTests
     {
         var w = new BlobWriter();
         new VisibleItem(0, 0x40a1, 2).Write(w);
-        Assert.Equal("00" + "01" + "A140" + "00000000" + "00" + "0000" + "00000000" + "00" + "02" + "A140" + "00", Convert.ToHexString(w.ToArray()));
+        Assert.Equal("00" + "01" + "A140" + "00000000" + "00" + "0000" + "00000000" + "00" + "02" + "A140" + "00" + "00" + "00", Convert.ToHexString(w.ToArray()));
         var item = new Item(1, ["Base"], 2);
         Assert.Equal("0000" + "0A000000" + "14000000" + "00000000" + "0000" + "00" + "00" + "00" + "00000000" + "00" + "00000000" +
                      Convert.ToHexString(item.Payload()) + "00" + "00", Convert.ToHexString(new WorldItemObject(10, 20, item).Blob()));

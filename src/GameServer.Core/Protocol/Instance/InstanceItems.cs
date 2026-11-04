@@ -240,7 +240,7 @@ public sealed record VisibleItem(byte Slot, ushort VisualIdentity, byte Stance =
         w.U8(Slot).U8(Type)
             .U16(SkinVisual != 0 ? SkinVisual : VisualIdentity).U32(SkinHash).U8(0)
             .U16(EffectVisual).U32(EffectHash).U8(0)
-            .U8(Stance).U16(VisualIdentity).U8(0);
+            .U8(Stance).U16(VisualIdentity).U8(0).U8(0).U8(0);   // 0.5.5: three tail bytes (+0x80..+0x82)
     }
 }
 
