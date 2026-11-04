@@ -183,9 +183,14 @@ partial class Program
                 // error ("account length must be more than 3 characters, [A-Za-z0-9_]") — the only such
                 // line in the whole day's Client.txt — and never sent the 0x9a area-generated reply that
                 // every pre-0x28 session sent. (SOLUTION-PLAN-2026-11-04 §2, regression from e0f85f5.)
+                // CONTROL EXPERIMENT (SOLUTION-PLAN 2.3): the 0x28 send is disabled entirely. Every
+                // session that carried it (empty name or account name) died ~35 ms after this burst —
+                // 16:50 even logged the identity name itself as the abnormal-disconnect reason — while
+                // every pre-0x28 session reached the 0x9a reply. If 0x9a returns now, our 0x28 encoding
+                // is the poison and gets re-derived byte-by-byte from read 0x142151cd0; if it does not,
+                // the regression is elsewhere (the Auth-side 0x15 probe is the next suspect).
                 string identityName = conn.Account ?? conn.Character ?? "";
-                await Send(remote, stream, ciphers, InstanceProtocol.Identity((ushort)instanceId, identityName),
-                    $"0x0028 instance identity (key {instanceId}, name \"{identityName}\")");
+                _ = identityName;
                 await Send(remote, stream, ciphers, area.Encode(), $"0x001e {area}; ascendancy family {conn.MainAscendancy.Selection?.Family}");
                 // 0.5.5: the content/state application (0x23) is NOT sent here. Sequencing per
                 // SOLUTION-PLAN-2026-11-04: S1 isolates the 0x28 identity-name fix on the pre-0x28
