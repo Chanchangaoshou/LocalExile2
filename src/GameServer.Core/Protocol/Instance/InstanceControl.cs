@@ -96,8 +96,8 @@ public sealed record ControlResponse
     /// The 0.5.5 client appears to key the instance connection from it rather than from the ticket (recon, 2026-11-04).</summary>
     public string? LoginKeyMaterial { get; init; }
     /// <summary>"resolve": the character's last town (HASH16): Resurrect in Town goes there. 0 before it has entered a
-    /// town (the death screen then has no Resurrect in Town). An Auth that does not send it leaves Lioneye's Watch.</summary>
-    public ushort LastTown { get; init; } = 0x235c;
+    /// town (the death screen then has no Resurrect in Town). An Auth that does not send it leaves G1_town (0x3f70).</summary>
+    public ushort LastTown { get; init; } = 0x3f70;
     public List<ControlInstance>? Instances { get; init; }
 }
 

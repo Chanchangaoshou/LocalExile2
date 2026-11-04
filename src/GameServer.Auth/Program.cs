@@ -116,7 +116,7 @@ static async Task Serve(LoginServerKeys keys)
             GameServer.Core.World.WorldAreaTowns.StartingAreaHash = startHash;
         Console.WriteLine($"[auth] start area: {startArea} (hash 0x{GameServer.Core.World.WorldAreaTowns.StartingAreaHash:x4}, areas: {areasJson})");
     }
-    // Every town of the game data (one shared instance each, seed 1); only Lioneye's Watch without data/tables.
+    // Every town of the game data (one shared instance each, seed 1); only G1_town without data/tables.
     var towns = GameServer.Core.World.WorldAreaTowns.Load(areasJson);
     // A new instance of an area the Gateway generates itself (ServerLevelAreas) gets a random seed; every other area
     // keeps seed 1, the seed its captures were dumped at. Game_RANDOM_SEEDS=0 (or Game_SERVER_LEVELS=0, which turns

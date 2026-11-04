@@ -199,7 +199,7 @@ public class LoginServerSessionTests
     {
         var accounts = new AccountService(new JsonAccountStore());
         var acc = accounts.Register("erin", "pw1234").Value!;
-        var session = new LoginServerSession(accounts);
+        var session = new LoginServerSession(accounts) { Leagues = new LeagueCatalog(["Standard", "Allflame"]) };
         session.Handle(Request("erin", "pw1234"));
 
         // As the 3.29.3b client sent it (live 2026-10-18): the start state names the class.

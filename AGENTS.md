@@ -1,6 +1,6 @@
 # Agent instructions
 
-LocalExile is a local server for the Path of Exile 3.29.3b client, built by people and AI agents working together.
+LocalExile2 is a local server for the Path of Exile 2 client (0.5.5), built by people and AI agents working together. All protocol facts and game data are derived from the 0.5.5 client itself; nothing is carried over from any PoE1 server, client or data export.
 All agent and contributor documentation is in [Agents/](Agents/). Read these first:
 
 1. [Agents/GettingStarted.md](Agents/GettingStarted.md): setup from a fresh clone, the rules for running the client,

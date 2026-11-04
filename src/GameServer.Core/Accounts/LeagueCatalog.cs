@@ -29,8 +29,9 @@ public sealed record League(string Name, string Base, bool Hardcore, bool Ssf, b
 /// The server's leagues: each base league with its seven variants, named as the official servers name them
 /// (Standard: Hardcore, SSF Standard, SSF Hardcore, Ruthless, Hardcore Ruthless, SSF Ruthless, SSF Hardcore Ruthless;
 /// a challenge league L: Hardcore L, SSF L, HC SSF L, Ruthless L, HC Ruthless L, SSF Ruthless L, HC SSF R L).
-/// Base leagues come from <c>Game_LEAGUES</c> (comma-separated), default Standard and Allflame (3.29, "Curse of the
-/// Allflame"; LeagueNames.dat row Deepwater). Any name works: the client has no league list of its own.
+/// Base leagues come from <c>Game_LEAGUES</c> (comma-separated), default Standard only. (Allflame was a
+/// PoE1 3.29 challenge league and is not part of the 0.5.5 default catalog.) Any name works: the client
+/// has no league list of its own.
 /// </summary>
 public sealed class LeagueCatalog
 {
@@ -47,7 +48,7 @@ public sealed class LeagueCatalog
         All = all;
     }
 
-    public static LeagueCatalog Default { get; } = new([Standard, "Allflame"]);
+    public static LeagueCatalog Default { get; } = new([Standard]);
 
     public static LeagueCatalog FromEnvironment() =>
         Environment.GetEnvironmentVariable("Game_LEAGUES") is { Length: > 0 } list ? new(list.Split(',')) : Default;
@@ -55,7 +56,7 @@ public sealed class LeagueCatalog
     public League? Find(string? name) =>
         name is null ? null : All.FirstOrDefault(l => string.Equals(l.Name, name, StringComparison.OrdinalIgnoreCase));
 
-    /// <summary>Resolves saved characters in the configured catalog or the default Standard/Allflame families.
+    /// <summary>Resolves saved characters in the configured catalog or the default Standard family.
     /// Creation uses <see cref="Find"/> so a narrower configuration does not offer disabled families again.</summary>
     public League? ResolveSavedLeague(string? name) => Find(name) ?? Default.Find(name);
 

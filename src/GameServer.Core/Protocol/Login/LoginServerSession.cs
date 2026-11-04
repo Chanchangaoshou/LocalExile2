@@ -54,8 +54,8 @@ public sealed class LoginServerSession(AccountService accounts)
     public InstanceKeyring Keyring { get; init; } = InstanceKeyring.Random();
 
     /// <summary>
-    /// 0x14 for the account's first character. The area hash is WorldAreas.HASH16 (Lioneye's Watch, 1_1_town = 0x235c
-    /// in 3.29.3b); an unknown hash makes the client throw "Area reported by instance does not exist". +0x30 is the port
+    /// 0x14 for the account's first character. The area hash is WorldAreas.HASH16 (G1_1 The Riverbank = 0x0f14
+    /// in 0.5.5); an unknown hash makes the client throw "Area reported by instance does not exist". +0x30 is the port
     /// (live-verified). The client echoes +0x34 (here the IPv4 address) in instance 0x0E and the ticket at +0x38 in
     /// instance 0x0F. The 64 key bytes become the instance connection's Salsa20 key material (Agents/docs/re/010). Data8 goes
     /// into the 0x0E digest and stays zero.
@@ -84,7 +84,8 @@ public sealed class LoginServerSession(AccountService accounts)
             var (area, assigned) = Assign(this);
             return [InstanceAssignment(area, assigned)];
         }
-        return [InstanceAssignment(0x235c, Keyring.NewTicket())];
+        // Fallback only (production Auth always sets Assign): G1_1 The Riverbank, the 0.5.5 start area.
+        return [InstanceAssignment(0x0f14, Keyring.NewTicket())];
     }
 
     /// <summary>The character chosen with Play (0x0e), once in game.</summary>
@@ -107,8 +108,8 @@ public sealed class LoginServerSession(AccountService accounts)
     /// <summary>The chosen character's last town (WorldAreas Id, null = none yet): where Play puts it.</summary>
     public string? CharacterLastTown { get; private set; }
 
-    /// <summary>Picks the area and ticket for Play (GameServer.Auth: the instance registry). Without it: Lioneye's
-    /// Watch with a fresh ticket.</summary>
+    /// <summary>Picks the area and ticket for Play (GameServer.Auth: the instance registry). Without it:
+    /// G1_1 (The Riverbank) with a fresh ticket.</summary>
     public Func<LoginServerSession, (ushort Area, uint Ticket)>? Assign { get; init; }
 
     /// <summary>0x14 sending the client to <paramref name="areaHash16"/> on the instance server with
@@ -267,25 +268,28 @@ public sealed class LoginServerSession(AccountService accounts)
     }
 
     /// <summary>
-    /// The account's characters as 0x15 entries. Mapped live (2026-10-16) with one probe character per field set to 3:
-    /// +0x48 is the level ("Level 3"), +0x4a the class (3 showed "Witch" on the PoE1 client, whose Characters
-    /// numbering the server enum matches with Scion = 0), +0x44 / +0x46 change the portrait, +0x49 adds a red
-    /// marker. The others showed no visible change. In the 0.5.5 layout level and class are u16 at the same
-    /// offsets; the class is sent in the CREATING client's numbering (<see cref="Character.ClassId"/>) when it
-    /// was recorded — the PoE2 client's differs from the enum (see <see cref="StartStateWireIds"/>). The +0x49
-    /// marker's new home is unknown, so the dead marker is NOT sent yet (a dead hardcore character would list
-    /// as alive — revisit before delete/resurrect work).
+    /// The account's characters as 0x15 entries. The 0.5.5 wire layout is verified instruction-by-instruction
+    /// against the client entry reader 0x142716700 (CLASS-DISPLAY-NOTES.md section 6): field ORDER is certain,
+    /// field MEANING is not — the parameter names are positional. Five numeric fields (U40/U44/U46/Level/Class)
+    /// were excluded live on 2026-11-04 as the select screen's class source (the screen still showed row 0,
+    /// Marauder, with every one of them carrying the real class), so the class comes from one of the six entry
+    /// bytes or a message-level field; the "bbbbbb" fingerprint in the body is the discriminating experiment.
+    /// The dead marker's 0.5.5 home is likewise unknown, so it is not sent (a dead hardcore character would
+    /// list as alive — revisit before delete/resurrect work).
     /// </summary>
     private ListEntry15[] CharacterEntries() =>
         Session is null ? [] :
         [.. accounts.Characters(Session.AccountId).Select(c =>
-            // 0.5.5 re-derivation (CLASS-DISPLAY-NOTES.md): the wire order matches the client reader
-            // 0x142716700 exactly, but the PoE1-era field labels were never verified on 0.5.5. U40 was
-            // excluded by live experiment (5c87704); with a Witch the only zero u16 fields left are
-            // U44/U46, so the select screen's class must be one of them. Discriminating probe: U44
-            // carries the class, U46 carries class+5 (clamped) — one look at the screen settles which.
-            new ListEntry15(c.Name, c.League, 0, 0, 0, (uint)(c.ClassId >= 0 ? c.ClassId : (int)c.Class), 0,
-                (ushort)(c.ClassId >= 0 ? c.ClassId : (int)c.Class),
-                (ushort)Math.Clamp((c.ClassId >= 0 ? c.ClassId : (int)c.Class) + 5, 0, 11),
-                (ushort)Math.Clamp(c.Level, 0, 65535), (ushort)(c.ClassId >= 0 ? c.ClassId : (int)c.Class), 0, 0))];
+        {
+            int classId = c.ClassId >= 0 ? c.ClassId : (int)c.Class;
+            // Section 6.6 fingerprint (CLASS-DISPLAY-NOTES.md): with every numeric field excluded, the
+            // throwaway carrier "bbbbbb" gets all-distinct values in every field whose semantics are
+            // still unverified; whichever Characters row the screen shows for it names the field.
+            // B4d=1, B51=2, U40=3, U44=4, U46=5, Level=6, Class=7, B4c=8, B4e=9, B4f=10, B50=11.
+            // Remove once the verdict is in; yyyyyy and every real character keep the plain form.
+            if (c.Name == "bbbbbb")
+                return new ListEntry15(c.Name, c.League, 1, 2, 8, 3, 9, 4, 5, 6, 7, 10, 11);
+            return new ListEntry15(c.Name, c.League, 0, 0, 0, (uint)classId, 0, 0, c.Portrait,
+                (ushort)Math.Clamp(c.Level, 0, 65535), (ushort)classId, 0, 0);
+        })];
 }
