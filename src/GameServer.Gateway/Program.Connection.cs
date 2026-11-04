@@ -137,9 +137,9 @@ partial class Program
                     // Recon probe (2026-11-04): the 0.5.5 instance stream's key setup reads further bytes from its
                     // receive queue after 0x11. Learn whether the client sends (or waits for) more handshake bytes
                     // before the area packet: hold the area packet, log any raw client bytes for 25 s.
-                    Console.WriteLine($"[gateway] {remote} WAIT_AFTER_11: opening carried {pending.Length} B total; holding the area packet for 25 s");
-                    if (pending.Length > InstanceProtocol.OpeningLength)
-                        Console.WriteLine($"[gateway] {remote} WAIT_AFTER_11: post-opening bytes already here: {Convert.ToHexString(pending.AsSpan(InstanceProtocol.OpeningLength))}");
+                    Console.WriteLine($"[gateway] {remote} WAIT_AFTER_11: opening carried {pending.Count} B total; holding the area packet for 25 s");
+                    if (pending.Count > InstanceProtocol.OpeningLength)
+                        Console.WriteLine($"[gateway] {remote} WAIT_AFTER_11: post-opening bytes already here: {Convert.ToHexString(pending.ToArray(), InstanceProtocol.OpeningLength, pending.Count - InstanceProtocol.OpeningLength)}");
                     using var probeCts = new CancellationTokenSource(TimeSpan.FromSeconds(25));
                     var probeBuf = new byte[4096];
                     try
