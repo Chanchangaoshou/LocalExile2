@@ -53,10 +53,14 @@ same commit.
    threw Buffer Underflow in the player blob). Evening7 pinned it:
    0.5.5 reads **Stats first**; the fork writes Positioned first, so
    the Stats reader decoded a 327,680-pair map out of the spawn
-   coordinates and ate the blob. Probe v11 (comp_call / stats_gate /
-   comp_order hooks) now harvests the gate value and the full
-   component order in one more enter; the blob rewrite follows from
-   that trace (evening8), per the notes' section 7 plan.
+   coordinates and ate the blob. The v11 trace (18:02) returned: **gate = 1**, and Stats is index **1** -
+   Positioned (index 0) consumes **19 B** in 0.5.5 (a third flag byte,
+   flagsC, evening8). The blob's idx0/idx1 are now rewritten and
+   deployed (c22749f: Positioned 19 B; Stats = fork pair stream +
+   6x0 gate + u32/u8/u8 tail; Core 424/424), and probe **v12** dumps
+   the full component table at fn C entry plus per-component
+   consumption. One more enter either stands the player in the
+   Riverbank or measures every remaining component (idx >= 2).
 2. **Class fingerprint (problem 2)**: at the character-select screen,
    note which class the throwaway character **bbbbbb** displays.
    (bbbbbb was deleted by the user on 2026-11-04 14:08 and has been

@@ -355,14 +355,37 @@ Interceptor.attach(at('0x141e71375'), {
     try {
       idx = this.context.rsi.toInt32() & 0xffff;
       vtbl = this.context.rcx.readPointer().toString();
-      const span = this.context.rdx;
-      cursor = span.add(0x10).readPointer().sub(span.readPointer()).toInt32();
+      cursor = this.context.rdx.add(0x10).readPointer().toString();
     } catch (e) {}
     send({ ev: 'comp_call', idx, vtbl, cursor, prev: lastCursor });
     lastCursor = cursor;
   }
 });
 Interceptor.attach(at('0x141e712a0'), {
+  onEnter(args) {
+    try {
+      const ent = this.context.rcx;
+      const D = ent.add(8).readPointer().add(0x28).readPointer();
+      const count = D.add(0x78).readU64().toNumber();
+      const arr = ent.add(0x10).readPointer();
+      let comps = [];
+      for (let i = 0; i < count && i < 24; i++) {
+        const comp = arr.add(i * 8).readPointer();
+        let vt = null, rf = null, ow = null, def = null;
+        try { vt = comp.readPointer().toString(); rf = comp.readPointer().add(0x98).readPointer().toString(); } catch (e) {}
+        try { ow = comp.add(8).readPointer().toString(); } catch (e) {}
+        try { def = comp.add(0x158).readPointer().toString(); } catch (e) {}
+        comps.push({ i, vt, rf, ow, def });
+      }
+      let desc = [];
+      try {
+        const b = D.add(0x298).readPointer(), e = D.add(0x2a0).readPointer();
+        const n = e.sub(b).toInt32() / 8;
+        for (let i = 0; i < n && i < 24; i++) desc.push(b.add(i * 8).readPointer().toString());
+      } catch (e) {}
+      send({ ev: 'fnC_table', count, comps, desc });
+    } catch (e) { send({ ev: 'fnC_table', err: '' + e }); }
+  },
   onLeave(retval) { send({ ev: 'fnC_done', lastCursor }); }
 });
 // (2) Stats reader B entry: the gate is a byte in the type-definition-side
@@ -377,23 +400,4 @@ Interceptor.attach(at('0x142181160'), {
     send({ ev: 'stats_gate', gate, vtbl });
   }
 });
-// (3) base ctor return: dump the entity's component vtable sequence
-//     ([entity+0x10]..[entity+0x18] is the component pointer range).
-function dumpComps(tag, ent) {
-  try {
-    const begin = ent.add(0x10).readPointer();
-    const end = ent.add(0x18).readPointer();
-    const n = end.sub(begin).toInt32() / 8;
-    let seq = [];
-    for (let i = 0; i < n && i < 32; i++) {
-      const comp = begin.add(i * 8).readPointer();
-      seq.push(comp.isNull() ? '0' : comp.readPointer().toString());
-    }
-    send({ ev: 'comp_order', tag, n, seq });
-  } catch (e) { send({ ev: 'comp_order', tag, err: '' + e }); }
-}
-Interceptor.attach(at('0x142601190'), {
-  onEnter(args) { this.ent = this.context.rcx; },
-  onLeave(retval) { if (this.ent) dumpComps('base_ctor_1190', this.ent); }
-});
-send({ ev: 'v11_armed' });
+send({ ev: 'v12_armed' });

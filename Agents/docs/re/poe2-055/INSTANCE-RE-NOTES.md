@@ -1244,3 +1244,192 @@ Buffs / Life / Animated / Player / Inventories / Actor + tasks 尾）从未被
 3. 钩基类 ctor 0x142601190 返回后（或 0x142601300）：dump
    [entity+0x10..+0x18) 各组件的 [comp] 虚表序列 → 组件序全表；选角
    界面的预览实体若走同一构造，不开实例连接即可采集。
+
+## 2026-11-04 evening8 — component order trace verdict
+
+任务：判读 v11 走序 trace（idx0 虚表 VA ≈ 0x1434d24f8、消费 19 B；idx1 =
+Stats；stats_gate = 1；comp_order dump 失败），给 index 0 定版、拆 fn C
+循环框架、用 .ot 或修正 dump 点拿全序、更正 evening7 §5、产出下一版 blob
+布局与 v12 钩子清单。地址均为 0.5.5 原始 exe 静态反汇编 + GGPK 实提取。
+
+### 0. trace 结论复核（已实证）
+
+- 基址差复核：Stats 运行时虚表 0x7ff64e86ba70 ↔ 镜像 VA 0x14350ba70，
+  得模块基址后 idx0 运行时虚表 0x7ff64e8324f8 换算 = **0x1434d24f8**，
+  与任务给定值逐位一致。
+- idx0 的 +0x98 槽 = **0x141dd89a0**；Stats 的 +0x98 槽经同法复核 =
+  0x142181160 = B ✓（虚表基址口径与 evening7 一致）。
+- idx0 消费 19 B 的可信性：fn C 循环体内除虚调用外不读 span（见 §2），
+  两次 comp_call 事件间游标差恰为 idx0 read fn 的消费，无夹带。
+
+### 1. index 0 = Positioned（定版）
+
+**类定位（已实证）**：虚表 0x1434d24f8 在全 exe 只有两处代码引用
+（numpy 全对齐 RIP 扫描）：ctor 的虚表装配点 0x141dd8030 与析构
+0x141dd8580（虚表槽 +0x00 本身，即 deleting dtor：对象大小 0x540）。
+ctor 在 0x141dd8030 起写：[this] = 0x1434d24f8（主虚表）、
+[this+0x18] = 0x1434D15B0（facet）、**[this+0x158] = rdx（类型定义
+对象）**，并从定义侧播种 [this+0x1e0] = u16 [def+0x16]、
+[this+0x1e2] = [def+0x1c]、[this+0x1e3] = [def+0x2d]。
+
+**身份 = Positioned（推断，强）**：read fn 把两个 u32 存入 +0x444/
++0x448 并按世界区域网格钳制（经 world 虚表 +0x1a8 取区域对象，
++0x18/+0x20 为网格宽高，×0x17 = 23 世界单位/格换算，浮点支路同理）；
+u16 存入 +0x1e0——与旧版文档 Positioned 的 team 字段偏移逐位相同，
+且 ctor 正是从定义（.ot Positioned 块的 team 等）播种该字段；尾部
+hidden/shown 可见性字节与旧版文档同构（旧：hidden→+0x1e7 bit0、
+shown→+0x1e5 bit3；0.5.5：→+0x1e6 bit0、+0x1e4 bit3，位号相同、
+偏移 −1）。无其他组件类有此字段谱。
+
+**线格式（read fn 0x141dd89a0，已实证逐指令）**，按读序：
+
+0. **Sector 前缀（定义门控）**：byte [def+0x29] ≠ 0 时先读 u32 A +
+   u32 B；A 经名字查表（键串 "Sector" @0x1434D5E60，查 D+0x28 的
+   map）写入同实体 Sector 组件的 +0x44。fork 旧文档独立记载过同一
+   结构（"Positioned's 8-byte prefix belongs to types with a Sector
+   component"）。**IntFour 无此段：[def+0x29] = 0（已实证——由
+   §4 的 19 B 算术反推：含前缀则 ≥ 27 B，与实测矛盾）。**
+1. u32 → +0x444（grid X）；u32 → +0x448（grid Y）；u32 → +0x44c；
+   u16 → +0x1e0（team）。
+2. **3 个标志字节**（read_exact(3) 进临时区，下称 flagsA/flagsB/flagsC）。
+3. 条件段（按代码序；门控位即刚读的标志字节）：
+   - flagsA&0x20：u32→+0x474、u32→+0x46c、u32→+0x470（12 B）
+   - flagsB&0x04：u32×4 → +0x4b0/+0x4b4/+0x4b8/+0x4bc（16 B）
+   - flagsA&0x04：u32→+0x440、u32→+0x48c（8 B）
+   - flagsA&0x40：u32→+0x490、u32→+0x494（8 B；未置位时由 X/Y 浮点
+     换算填 +0x490 的 double）
+   - flagsA&0x02：**不读流**——按类型哈希 0x7700c879（回退
+     0x31fb1f01）找同实体兄弟组件并拷其字段
+   - flagsC&0x02：子读程 0x141ec9d20(span) → +0x208 子对象（以自身
+     u8 标志开场，read_exact(1)；全格式待定）
+   - flagsB&0x01：22 B 块 = u32×3（三元键，喂资源名构造）+
+     read_exact(2) + u32 + u8×4，产物由 0x141de31a0 建子对象
+     （语义待定）
+   - flagsB&0x02：u8（hidden → +0x1e6 bit0）+ u8（shown → +0x1e4
+     bit3），两者变更均调虚表 +0xc0 可见性回调（共 2 B）
+   - flagsB&0x08：u8（→ +0x1e5 bit 0x40）+ u8 → +0x1e2（2 B）
+   - flagsB&0x10：u32 → +0x450；flagsB&0x40：u8 → +0x478；
+     flagsB&0x80：u8 → +0x47a
+   - flagsC&0x01：子读程 0x141ed4200(span) → +0x1e8 内嵌子对象
+     （自其 +0x10 起逐 u8 字段；全格式待定）
+   - flagsA 的 0x01/0x08/0x10/0x80、flagsB 0x20、flagsC 0x04 只改
+     内部标志位、不读流。
+
+**19 B 构成与逐字节 diff（已实证，对 17:44/18:02 两次会话的真实
+字节）**：fork 写 [X4][Y4][U32][U16][00][02][00][01] = 18 B。
+0.5.5 读法：前 14 B 逐位相同（X=197、Y=261、U32=0、team=0）；随后
+需要**三个**标志字节——fork 的 [00]→flagsA、[02]→flagsB、[00]→flagsC；
+flagsB = 0x02 触发尾对：fork 的 [01] 被读作 hidden（bl），**再下一
+字节是 fork Stats 节的首字节 0x80，被读作 shown（al）**。
+即：**多出的 1 B 是 flagsB&0x02 的第二个尾字节；根源是 0.5.5 的
+固定块比旧格式多一个 flagsC，hidden/shown 对整体后移一位，fork
+的节恰好短 1 B。**（旁证：该会话中 Positioned 确实执行了
+flagsB&0x02 块并把 hidden 置 1——错位机制自洽。）
+- 最小形（全标志 0、无 Sector 前缀）= 17 B；
+- 保持 fork 意图（hidden=0、shown=1）的正确写 = X,Y,U32,U16,
+  flagsA=0, flagsB=0x02, flagsC=0, hidden=0, shown=1 = **19 B**。
+
+### 2. fn C 循环框架（0x141e712a0，已实证逐指令；补正 evening7 §1）
+
+- flags 字节（内联界检读）→ base data 子程 0x141e715a0 → 组件循环
+  → tasks 尾，全程与 evening7 §1 一致。
+- 循环体（0x141e71340–0x141e7137d）逐轮：typeInfo = [entity+0x8]，
+  非空则 call 0x1421d7070(typeInfo)（不带 span，不可能读 blob）；
+  D = [typeInfo+0x28]；上界 = **[D+0x78]**（u64，每轮重读）；
+  comp = **[[entity+0x10] + esi×8]**（指针数组，步长 8）；
+  属主检查 [comp+8] == entity，不满足则**跳过但索引照耗**；
+  call [[comp]+0x98](comp, span)。
+- **fn C 在循环内自身不读任何字节**——无 per-component 前缀/后缀；
+  comp_call 游标差 = 组件消费本身（已实证）。
+- 组件对象来源：实体 ctor 在 fn C 之前调实例化子程 **0x141e70790**，
+  它遍历 D 的描述符向量（begin [D+0x298]、end [D+0x2a0]）按同序填
+  [entity+0x10] 数组。
+- **v11 comp_order dump 失败原因（已实证）**：钩子挂在基类 ctor
+  0x142601190 返回点——此时 0x141e70790 尚未运行、[entity+0x10]
+  未填充；且 [entity+0x18] 根本不是数组尾（循环只用 [entity+0x10]
+  + D 的计数）。正确 dump 点 = fn C 入口（或 0x141e70790 返回点）。
+
+### 3. 全序：.ot 集合（已实证）+ 序列化序（部分实证）
+
+GGPK 实提取（提取前已确认游戏进程未运行；ggpk-extract 批量跑）：
+- `metadata/characters/` 下**只有** character.ot、character_login.ot、
+  character_mobile.ot 三个 .ot；**不存在** int/intfour.ot——职业对象
+  类型由 Character.ot + Characters.dat 的 PlayerClass 注册
+  （yamafutureclone_intfour.ot 实证同一模式：extends 基类 .ot +
+  `PlayerClass { class = "IntFour" }`）。
+- Character.ot（abstract，extends "nothing"）的服务端组件块声明序：
+  **Stats, Positioned, Pathfinding, Buffs, Life, Animated, Player,
+  PlayerClass, Inventories, Actor**（共 10；其后 client{} 块为客户端
+  facet，不入服务端序）。
+- 序列化序：[0] = Positioned、[1] = Stats（v11 trace 已实证）。
+  其余为**推断**：Positioned 被提至首位、其余按 .ot 声明序 =
+  Positioned, Stats, Pathfinding, Buffs, Life, Animated, Player,
+  PlayerClass, Inventories, Actor。旁证（旧版真机 trace，fork
+  PlayerObject 文档）：旧序为 Positioned, Stats, comp3(u16 计数 =
+  Buffs), Life, Animated, Player@6, Inventories@8, Actor@9，
+  Pathfinding 与 PlayerClass 读 0 B——与上列推断序逐位相容。
+  **待验**：0.5.5 的组件总数是 10 还是旧版的 12（旧版 Actor 之后
+  还有两个未验组件）——v12 dump 读 [D+0x78] 一次定案。
+
+### 4. evening7 §5 正式更正（Stats 错位读的真实算术，已实证）
+
+真实字节（网关日志，两次会话逐字节相同）：blob[20] = 0x80、
+blob[21] = 0xBA、blob[22] = 0x81、blob[23] = 0x17、blob[24] = 0x02。
+- fork Stats 节：count = CompactU[20..21] = ((0x80&0x3F)<<8)|0xBA
+  = **186 对**；首对 key = [22..23] = 0x117 = 279、value = [24] 起，
+  格式完好（若 B 从 20 起读本可精确消费）。
+- Positioned（idx0）消费 [2..20] 共 19 B，其最后一个字节正是
+  blob[20] = 0x80（被当作 shown 尾字节）。
+- **B 从 blob[21] 起读：count = A(0xBA, 0x81) = ((0xBA&0x3F)<<8)|
+  0x81 = 0x3A81 = 14,977 对**。每对 ≥ 2 B → 需 ≥ 29,954 B，余量
+  仅 1,078 B → pair 循环必然把 blob 吃到最后一字节、在剩余 0 时
+  读下一 key 的首字节抛错（A 的 r9d=1 stub）——与 17:44 回溯
+  （B 第一 stat map 循环内、返回址 0x1421811a8）逐项吻合；B 至死
+  未达 gate/尾段。
+- **evening7 §5 的旧机制（B 自偏移 2 的 0xC5 解出 327,680 对）
+  正式作废**：真实落点是偏移 21 的 0xBA → 14,977 对。失败形态
+  相同、落点与数值不同。gate = 1 的结论不受影响（v11 在 B 入口
+  自定义侧对象读得，与流位置无关）。
+
+### 5. 下一版 blob 完整布局与确定程度
+
+帧头与 tasks 尾维持 fork 现状（已与 0.5.5 对齐，已实证）。
+
+| idx | 组件 | read fn（0.5.5） | 下一版写法 | 状态 |
+|---|---|---|---|---|
+| 0 | Positioned | 0x141dd89a0（vtbl 0x1434d24f8） | 19 B：I32 X、I32 Y、U32(0)、U16(team)、U8(0) flagsA、U8(0x02) flagsB、U8(0) flagsC、U8(0) hidden、U8(1) shown | **已定版**（格式已实证；hidden/shown 语义为强推断） |
+| 1 | Stats | 0x142181160 = B（vtbl 0x14350ba70） | fork Stats() 对流原样 + **gate 段 6×0**（gate = 1 已实证）+ 尾 U32(0)+U8(0)+U8(0)（删旧尾第二个 U32） | **已定版** |
+| 2 | Pathfinding | 待 v12 dump | 0 B（旧版为 ret 桩） | 待 trace |
+| 3 | Buffs | 待 v12 dump | U16(0) 基线（旧：u16 计数条目） | 待 trace |
+| 4 | Life | 待 v12 dump | fork 现 55 B 基线 | 待 trace |
+| 5 | Animated | 待 v12 dump | fork 现写基线（U8 + 可选 WStr32 路径） | 待 trace |
+| 6 | Player | 待 v12 dump | fork 现写基线 | 待 trace |
+| 7 | PlayerClass | 待 v12 dump | 0 B（旧版读 0 B） | 待 trace |
+| 8 | Inventories | 待 v12 dump | fork 现写基线 | 待 trace |
+| 9 | Actor | 待 v12 dump | fork 现写基线 | 待 trace |
+| 10/11? | （旧版 Actor 后另有 2 个未验组件） | 待 v12 计数 | 若 [D+0x78] = 12 则存在，按 dump 的 read fn 另行定版 | 待 trace |
+
+确定程度小结：帧头 + idx0 + idx1 已逐字节定版；idx ≥ 2 仍为旧
+格式基线假设。改完 idx0/idx1 后，Stats 将完整读完（186 对 + gate
++ 尾），循环推进到 idx2——同一会话里 v12 的 comp_call 游标差会把
+idx ≥ 2 每个组件的真实消费一并测出（即使在某 idx 再抛错）。
+
+### 6. 探针 v12 钩子清单（确切）
+
+1. **fn C 入口 dump（新，替代失效的 comp_order）**：钩 0x141e712a0
+   onEnter，rcx = entity：
+   D = [[rcx+8]+0x28]；count = u64 [D+0x78]；arr = [rcx+0x10]；
+   逐 i < count：comp = [arr+i×8]，发 {idx: i, vtbl: [comp],
+   readfn: [[comp]+0x98], owner: [comp+8], def: [comp+0x158]}
+   （def 字段非全组件都有，读失败记 null）。
+   期望产出：组件总数（10 vs 12）+ 全序虚表 + 每个 read fn VA——
+   与 §3 的 .ot 名单对照即得命名全序。
+   同时 raw dump 描述符向量：begin = [D+0x298]、end = [D+0x2a0]，
+   逐条发 8 B 原值，供离线对描述符布局。
+2. **comp_call（沿用 v11）**：钩 0x141e71375 onEnter，发
+   {idx: esi, vtbl: [rcx], cursor: [rdx+0x10]}（绝对游标即可，
+   离线作差）。期望产出：idx ≥ 2 每个组件的实际消费字节数。
+3. **stats_gate（沿用 v11）**：钩 B 入口 0x142181160，发
+   {gate: [[rcx+0x158]+0x20]}。期望产出：复证 gate = 1。
+4. 沿用 v11 的异常处理器、entity_ctor、world_* 钩子作回归上下文。
+   删除 0x142601190 的 comp_order 钩（已证无效）。
