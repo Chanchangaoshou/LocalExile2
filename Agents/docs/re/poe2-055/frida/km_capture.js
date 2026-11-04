@@ -605,3 +605,48 @@ safeAttach('cnt_rowapp', '0x14140ea70', { onEnter(args) { cntRowapp++; if (cntRo
 var hbN = 0;
 setInterval(function () { hbN++; send({ ev: 'hb', n: hbN }); }, 1000);
 send({ ev: 'v19_armed' });
+
+// ---- v20: ctor chain stall probe (evening17) ----
+function rd20(p, off) { try { return p.add(off).readPointer().toString(); } catch (e) { return 'ERR'; } }
+safeAttach('ctor', '0x141e705d0', {
+  onEnter(args) { send({ ev: 'ctor_in', a0: args[0].toString(), a1: args[1].toString(), a2: args[2].toString(), a3: args[3].toString(), ra: this.returnAddress.toString() }); },
+  onLeave(ret) { send({ ev: 'ctor_out', ret: ret.toString() }); }
+});
+safeAttach('ctor601', '0x142601190', {
+  onEnter(args) { send({ ev: 'c601_in', a0: args[0].toString(), a1: args[1].toString() }); },
+  onLeave(ret) { send({ ev: 'c601_out', ret: ret.toString() }); }
+});
+safeAttach('ctor790', '0x141e70790', {
+  onEnter(args) { send({ ev: 'c790_in', a0: args[0].toString(), a1: args[1].toString(), d298: rd20(args[1], 0x298), d2a0: rd20(args[1], 0x2a0) }); },
+  onLeave(ret) { send({ ev: 'c790_out', ret: ret.toString() }); }
+});
+safeAttach('ctor480', '0x142601480', {
+  onEnter(args) { send({ ev: 'c480_in', a0: args[0].toString(), a1: args[1].toString() }); },
+  onLeave(ret) { send({ ev: 'c480_out', ret: ret.toString() }); }
+});
+var recDepth = 0, recN = 0;
+safeAttach('ctor300', '0x142601300', {
+  onEnter(args) {
+    recDepth++; recN++;
+    if (recDepth >= 2 || recN <= 3) send({ ev: 'c300_in', depth: recDepth, n: recN, rsp: this.context.rsp.toString(), a0: args[0].toString(), a1: args[1].toString() });
+  },
+  onLeave(ret) { recDepth--; }
+});
+safeAttach('factory', '0x1415d7710', {
+  onEnter(args) { send({ ev: 'fact_in', a0: args[0].toString(), a1: args[1].toString() }); },
+  onLeave(ret) { send({ ev: 'fact_out', ret: ret.toString() }); }
+});
+safeAttach('loop10', '0x141e70720', {
+  onEnter(args) { send({ ev: 'loop10', a0: args[0].toString(), a1: args[1].toString(), rcx: this.context.rcx.toString(), rdx: this.context.rdx.toString() }); }
+});
+safeAttach('registry', '0x141693840', {
+  onLeave(ret) { send({ ev: 'reg_out', ret: ret.toString(), isnull: (ret.isNull() ? '1' : '0') }); }
+});
+var allocN = 0;
+safeAttach('alloc', '0x142bba600', {
+  onLeave(ret) {
+    allocN++;
+    if (ret.isNull() || allocN % 5000 === 0) send({ ev: 'alloc_out', n: allocN, isnull: (ret.isNull() ? '1' : '0') });
+  }
+});
+send({ ev: 'v20_armed' });
