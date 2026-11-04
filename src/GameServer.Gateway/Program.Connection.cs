@@ -132,6 +132,28 @@ partial class Program
                 KmProbe.Log($"[gateway] {remote}", opening.Ticket, keyring.Key(opening.Ticket), loginKmBytes, Console.WriteLine);
                 await stream.WriteAsync(InstanceProtocol.StartEncryption());
                 Console.WriteLine($"[gateway] {remote} => 0x0011 (start encryption)");
+                if (Environment.GetEnvironmentVariable("Game_INSTANCE_WAIT_AFTER_11") == "1")
+                {
+                    // Recon probe (2026-11-04): the 0.5.5 instance stream's key setup reads further bytes from its
+                    // receive queue after 0x11. Learn whether the client sends (or waits for) more handshake bytes
+                    // before the area packet: hold the area packet, log any raw client bytes for 25 s.
+                    Console.WriteLine($"[gateway] {remote} WAIT_AFTER_11: opening carried {pending.Length} B total; holding the area packet for 25 s");
+                    if (pending.Length > InstanceProtocol.OpeningLength)
+                        Console.WriteLine($"[gateway] {remote} WAIT_AFTER_11: post-opening bytes already here: {Convert.ToHexString(pending.AsSpan(InstanceProtocol.OpeningLength))}");
+                    using var probeCts = new CancellationTokenSource(TimeSpan.FromSeconds(25));
+                    var probeBuf = new byte[4096];
+                    try
+                    {
+                        while (true)
+                        {
+                            int pn = await stream.ReadAsync(probeBuf, probeCts.Token);
+                            if (pn == 0) { Console.WriteLine($"[gateway] {remote} WAIT_AFTER_11: client closed the connection"); break; }
+                            Console.WriteLine($"[gateway] {remote} WAIT_AFTER_11: client sent {pn} B: {Convert.ToHexString(probeBuf, 0, pn)}");
+                        }
+                    }
+                    catch (OperationCanceledException) { Console.WriteLine($"[gateway] {remote} WAIT_AFTER_11: 25 s elapsed, sending the area packet now"); }
+                    catch (IOException ex) { Console.WriteLine($"[gateway] {remote} WAIT_AFTER_11: read failed: {ex.Message}"); }
+                }
 
                 // Anything after the opening was already encrypted by the client.
                 var conn = new ClientState(layout, ticket, seed) { Character = resolved.Character, CharacterId = resolved.CharacterId, CosmeticPortalVariation = resolved.Character is { Length: > 0 } savedCharacter ? CharacterSaves.PortalCosmetic(savedCharacter) : (ushort)0, Account = resolved.Account, League = resolved.League, Hardcore = resolved.Hardcore, Ssf = resolved.Ssf, Ruthless = resolved.Ruthless, CameFrom = AreaLayouts.CameFrom.TryRemove(ticket, out var from) ? from : null, Instance = Instances.Enter(instanceId, resolved.Created, resolved.Ssf ? resolved.CharacterId?.ToString("N") : null), InstanceNumber = instanceId, LastTown = resolved.LastTown, ClassRow = Skills.RowOfClass(resolved.ClassId), Pools = CharacterStats.For(Skills.ClassFor(Skills.RowOfClass(resolved.ClassId)), resolved.Level), Hnc = new HncSender(keyring.Key(opening.Ticket)), Keyring = keyring };
