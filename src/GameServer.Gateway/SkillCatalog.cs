@@ -914,21 +914,22 @@ sealed class SkillCatalog(string folder = "data", bool ruthless = false)
         }
     }
 
-    /// <summary>A class from Characters.dat: IntegerId (what the Player component's class byte holds: Marauder 1, Witch 3),
+    /// <summary>A class from Characters.dat: IntegerId (what the Player component's class byte holds, in the
+    /// client's own numbering: Witch 1, Sorceress 7),
     /// the base attributes, and the player object's type (the row's Id, e.g. Metadata/Characters/StrInt/StrInt for the
     /// Templar) and model (AOFile).</summary>
     public sealed record ClassInfo(int IntegerId, int Strength, int Dexterity, int Intelligence,
-        string ObjectType = "Metadata/Characters/Int/Int", string AnimatedObject = "Metadata/Characters/Int/Int.ao",
-        int BaseMaxLife = 38, int BaseMaxMana = 34)
+        string ObjectType = "Metadata/Characters/Int/IntFour", string AnimatedObject = "Metadata/Characters/Int/IntFour.ao",
+        int BaseMaxLife = 16, int BaseMaxMana = 30)
     {
-        public static readonly ClassInfo Witch = new(3, 14, 14, 32);
+        public static readonly ClassInfo Witch = new(1, 7, 7, 15);
     }
 
     /// <summary>The Witch's Characters.dat row, used when a class is unknown.</summary>
     public const int WitchRow = 1;
 
-    /// <summary>The Characters.dat row of a class by IntegerId (CharacterClass): Marauder 1 → row 0, Witch 3 → row 1,
-    /// Templar 5 → row 6.</summary>
+    /// <summary>The Characters.dat row of a class by its IntegerId in the client's own numbering (the
+    /// character record's ClassId): Witch 1 → row 1, Warrior 6 → row 6, Druid 11 → row 11.</summary>
     public int RowOfClass(int integerId)
     {
         string path = Path.Combine(folder, "tables", "Characters.json");

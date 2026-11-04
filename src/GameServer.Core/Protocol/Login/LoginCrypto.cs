@@ -80,6 +80,17 @@ public sealed class ConnectionCiphers
         Send = new Salsa20(key, isClient ? ivC2S : ivS2C);
         Receive = new Salsa20(key, isClient ? ivS2C : ivC2S);
     }
+
+    /// <summary>The first 16 bytes of both directions' keystreams for a key material (diagnostics): a client
+    /// deserialisation failure exposes its first keystream bytes through the bogus packet id, which identifies
+    /// which material the client actually keyed its connection from.</summary>
+    public static (string Send, string Receive) Probe(ReadOnlySpan<byte> keyMaterial, bool isClient = false)
+    {
+        var ciphers = new ConnectionCiphers(keyMaterial, isClient);
+        var send = new byte[16]; ciphers.Send.Process(send);
+        var receive = new byte[16]; ciphers.Receive.Process(receive);
+        return (Convert.ToHexString(send), Convert.ToHexString(receive));
+    }
 }
 
 public static class LoginKdf

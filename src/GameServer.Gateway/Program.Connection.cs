@@ -126,11 +126,19 @@ partial class Program
                     ciphers = new ConnectionCiphers(loginKm, isClient: false);
                     Console.WriteLine($"[gateway] {remote} instance ciphers from LOGIN key material (Game_INSTANCE_KEYMODE=login)");
                 }
+                var ticketProbe = ConnectionCiphers.Probe(keyring.Key(opening.Ticket));
+                Console.WriteLine($"[gateway] {remote} km probe: ticket send {ticketProbe.Send} recv {ticketProbe.Receive}");
+                if (resolved.LoginKeyMaterial is { Length: > 0 } probeText &&
+                    Convert.TryFromBase64String(probeText, new byte[64], out int probeWritten) && probeWritten == 64)
+                {
+                    var loginProbe = ConnectionCiphers.Probe(Convert.FromBase64String(probeText));
+                    Console.WriteLine($"[gateway] {remote} km probe: login  send {loginProbe.Send} recv {loginProbe.Receive}");
+                }
                 await stream.WriteAsync(InstanceProtocol.StartEncryption());
                 Console.WriteLine($"[gateway] {remote} => 0x0011 (start encryption)");
 
                 // Anything after the opening was already encrypted by the client.
-                var conn = new ClientState(layout, ticket, seed) { Character = resolved.Character, CharacterId = resolved.CharacterId, CosmeticPortalVariation = resolved.Character is { Length: > 0 } savedCharacter ? CharacterSaves.PortalCosmetic(savedCharacter) : (ushort)0, Account = resolved.Account, League = resolved.League, Hardcore = resolved.Hardcore, Ssf = resolved.Ssf, Ruthless = resolved.Ruthless, CameFrom = AreaLayouts.CameFrom.TryRemove(ticket, out var from) ? from : null, Instance = Instances.Enter(instanceId, resolved.Created, resolved.Ssf ? resolved.CharacterId?.ToString("N") : null), InstanceNumber = instanceId, LastTown = resolved.LastTown, ClassRow = Skills.RowOfClass(resolved.Class), Pools = CharacterStats.For(Skills.ClassFor(Skills.RowOfClass(resolved.Class)), resolved.Level), Hnc = new HncSender(keyring.Key(opening.Ticket)), Keyring = keyring };
+                var conn = new ClientState(layout, ticket, seed) { Character = resolved.Character, CharacterId = resolved.CharacterId, CosmeticPortalVariation = resolved.Character is { Length: > 0 } savedCharacter ? CharacterSaves.PortalCosmetic(savedCharacter) : (ushort)0, Account = resolved.Account, League = resolved.League, Hardcore = resolved.Hardcore, Ssf = resolved.Ssf, Ruthless = resolved.Ruthless, CameFrom = AreaLayouts.CameFrom.TryRemove(ticket, out var from) ? from : null, Instance = Instances.Enter(instanceId, resolved.Created, resolved.Ssf ? resolved.CharacterId?.ToString("N") : null), InstanceNumber = instanceId, LastTown = resolved.LastTown, ClassRow = Skills.RowOfClass(resolved.ClassId), Pools = CharacterStats.For(Skills.ClassFor(Skills.RowOfClass(resolved.ClassId)), resolved.Level), Hnc = new HncSender(keyring.Key(opening.Ticket)), Keyring = keyring };
                 ConnectionMetrics.Add(ciphers, conn.Performance);
                 PacketHistories.Add(ciphers, conn.Packets);
                 left = conn;

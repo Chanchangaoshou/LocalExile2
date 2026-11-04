@@ -84,8 +84,12 @@ public sealed record ControlResponse
     public bool Hardcore { get; init; }
     public bool Ssf { get; init; }
     public bool Ruthless { get; init; }
-    /// <summary>The character's class: Characters.dat IntegerId (CharacterClass), the Witch (3) if unknown.</summary>
+    /// <summary>The character's class as the legacy server enum (CharacterClass), the Witch (3) if unknown.
+    /// Retained for older consumers; the gameplay class row comes from <see cref="ClassId"/>.</summary>
     public int Class { get; init; } = 3;
+    /// <summary>"resolve": the character's class in the creating client's own numbering (PoE2 Characters
+    /// IntegerId: Witch 1, Sorceress 7, Warrior 6, ...), -1 when the record predates it.</summary>
+    public int ClassId { get; init; } = -1;
     /// <summary>The character's level (from the account store).</summary>
     public int Level { get; init; } = 1;
     /// <summary>"resolve": base64 of the 64-byte key material of the login connection that issued the ticket.

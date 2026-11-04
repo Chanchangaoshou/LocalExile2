@@ -76,6 +76,7 @@ public sealed class LoginServerSession(AccountService accounts)
         CharacterId = chosen.Id;
         CharacterLeague = Leagues.ResolveSavedLeague(chosen.League);
         CharacterClass = chosen.Class;
+        CharacterClassId = chosen.ClassId;
         CharacterLevel = chosen.Level;
         CharacterLastTown = chosen.LastTown;
         if (Assign is not null)
@@ -95,6 +96,10 @@ public sealed class LoginServerSession(AccountService accounts)
 
     /// <summary>The chosen character's class.</summary>
     public CharacterClass CharacterClass { get; private set; } = CharacterClass.Witch;
+
+    /// <summary>The chosen character's class in the creating client's own numbering (PoE2 Characters
+    /// IntegerId), -1 when the record predates it. Gameplay class decisions use this, never the server enum.</summary>
+    public int CharacterClassId { get; private set; } = -1;
 
     /// <summary>The chosen character's level (the Auth server changes it for /set_level, so later tickets carry it).</summary>
     public int CharacterLevel { get; set; } = 1;
