@@ -31,8 +31,11 @@ porting log — where it disagrees with these notes, **these notes win**.
 | Login layer: account, character list/create/delete, enter-game ticket | ✅ live-proven (M1, 2026-11-04 06:50) |
 | Instance crypto (Salsa streams, opening) | ✅ solved and live-proven |
 | Area packet S→C `0x1e` accepted, client generates the area, replies C→S `0x9a` | ✅ live-proven |
-| Player spawn (world `0x2f7` CreateObject) | ⚠️ delivered, decrypted, object created client-side — **blocked**: the world is never ticked/dispatched (see open problem 1) |
-| Character-select class display | ❌ open: UI shows Characters row 0 for every character (see open problem 2) |
+| Player spawn (world `0x2f7` CreateObject) | ⚠️ delivered, decrypted, object created client-side — **blocked**: the world is never ticked/dispatched. Activation trigger identified (`0x23` → aggregate main vtable +0x1f0 → activation); the value-only test S1 is deployed and awaiting one live session (see open problem 1 and `CURRENT-STATUS.md`) |
+| Instance `0x28` | ✅ **solved: it is a disconnect-with-reason (kick) message, not an identity message** (evening5). Never send it in the entry sequence |
+| Character-select class display | ⚠️ open: wire format and all five numeric fields excluded by audit + live probe; the all-distinct fingerprint on the throwaway character `bbbbbb` is deployed and awaiting one look at the select screen (see open problem 2) |
+| Item tables (gateway) | ⚠️ 32 tables re-exported from the 0.5.5 GGPK into staging (`ITEM-TABLES-REEXPORT.md`); deployment scheduled after the S2 readout |
+| Reboot resilience | ✅ watchdog restores hosts entries and all listeners (negative-tested 2026-11-04) |
 | Inventories / skill bar / gold in-area | not started (message ids in 0.5.5 not yet identified) |
 
 ## Proven protocol facts (digest; full evidence in INSTANCE-RE-NOTES.md)

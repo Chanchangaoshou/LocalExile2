@@ -71,7 +71,20 @@ function hookProcess(pairPtr) {
     send({ ev: 'pair_proc', proc: vaStr(proc) });
     processHooked = true;
     let count = 0;
-    Interceptor.attach(proc, {
+    // v8: crash capture (SOLUTION-PLAN 4.1) — log the faulting VA + registers + backtrace,
+// then return false so the client's own handler/minidump still runs.
+Process.setExceptionHandler(function (d) {
+  try {
+    const bt = Thread.backtrace(d.context, Backtracer.ACCURATE)
+      .map(a => vaStr(a)).join(' ');
+    send({ ev: 'exception', type: d.type, addr: vaStr(d.address),
+           rip: vaStr(d.context.rip), rcx: vaStr(d.context.rcx), rdx: vaStr(d.context.rdx),
+           r8: vaStr(d.context.r8), bt: bt });
+  } catch (e) { send({ ev: 'exception', note: 'handler failed: ' + e }); }
+  return false;
+});
+
+Interceptor.attach(proc, {
       onEnter(args) {
         this.len = args[3].toInt32();
         this.a = args[1]; this.b = args[2]; this.self = args[0];
@@ -271,9 +284,21 @@ Interceptor.attach(at('0x14218bf90'), {
   }
 });
 Interceptor.attach(at('0x1416820a0'), {
-  onEnter(args) { send({ ev: 'facet_callback' }); }
+  onEnter(args) {
+    // v9 (plan v2 section 3.2): dump the world aggregate's decision fields on entry.
+    const agg = this.context.rcx;
+    let d = { ev: 'facet_callback', agg: agg.toString() };
+    try {
+      d.area98 = agg.add(0x98).readPointer().toString();
+      d.fc8 = agg.add(0xfc8).readPointer().toString();
+      d.f1270 = agg.add(0x1270).readPointer().toString();
+      d.v11c = agg.add(0x11c).readU32();
+    } catch (e) { d.dumpErr = '' + e; }
+    send(d);
+  }
 });
 send({ ev: 'v6_armed' });
+send({ ev: 'v9_armed' });
 
 // ---- v7: game state machine + instance identity setter ----
 let smCount = 0;
