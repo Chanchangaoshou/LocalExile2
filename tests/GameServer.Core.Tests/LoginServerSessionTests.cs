@@ -254,13 +254,13 @@ public class LoginServerSessionTests
         var session = new LoginServerSession(accounts) { CharacterDeleted = n => deleted = n };
         session.Handle(Request("fay", "pw1234"));
 
-        var replies = session.Handle(new WStringU8Message(LoginServerSession.DeleteCharacterId, "fayone", 0));
+        var replies = session.Handle(new DeleteCharacter(LoginServerSession.DeleteCharacterId, "fayone", 0, 0));
         Assert.Equal("FayTwo", Assert.Single(Assert.IsType<List15>(replies[0]).Entries).Name);
         Assert.Equal(new U16Message(LoginServerSession.DeleteCharacterResultId, 0), replies[1]);
         Assert.Equal("FayOne", deleted);
         Assert.Equal("FayTwo", Assert.Single(accounts.Characters(acc.Id)).Name);
 
-        var missing = Assert.IsType<U16Message>(Assert.Single(session.Handle(new WStringU8Message(LoginServerSession.DeleteCharacterId, "Nobody", 0))));
+        var missing = Assert.IsType<U16Message>(Assert.Single(session.Handle(new DeleteCharacter(LoginServerSession.DeleteCharacterId, "Nobody", 0, 0))));
         Assert.Equal(LoginServerSession.ResultCharacterDoesNotExist, missing.Value);
     }
 
