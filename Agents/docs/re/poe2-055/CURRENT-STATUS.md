@@ -22,16 +22,26 @@ a watchdog (`Tools\le2-watchdog.ps1`, logon + 30-min scheduled tasks)
 restores the four `hosts` redirects and any dead listener. Kill switch:
 `Tools\watchdog.off`.
 
-## Waiting on ONE user login (two readouts ride the same session)
+## S1 verdict (2026-11-04 17:29 session, probe-proven)
 
-1. **S1 (problem 1)**: the gateway sends `0x11 → 0x1e → 0x23(value 1000)`
-   in the connection burst and nothing else. Verdict:
-   - activation counters fire, no crash → value hypothesis proven → do S2;
-   - no activation → check the 0x23 dispatch preconditions;
-   - crash → the Frida v9 probe log (`km_capture.log` on the PC) holds
-     the faulting VA + the aggregate dump (area98/fc8/f1270/v11c).
+The 0x23 was dispatched, the callback ran, **activation fired for the
+first time ever**, and the value 1000 is confirmed in the aggregate
+(v11c=1000, area98 non-null, fc8=0). The client then crashed in the
+callback's tail: access violation at **0x142ac16b0**, called from
+0x1416820bd inside 0x1416820a0, with **[agg+0x1270]=0** — the field
+the tail call consumes. Same signature as the 16:16 value-0 crash,
+so **the value was never the crash cause**; the blocker is now this
+one null field. evening6 RE is dissecting the tail call, the field's
+writers, and whether post-generation timing (S2) populates it.
+No user test is needed until that lands.
+
+## Waiting on the NEXT user login (called when ready)
+
+1. **S2 (problem 1)** — sequence prepared per the evening6 verdict.
 2. **Class fingerprint (problem 2)**: at the character-select screen,
    note which class the throwaway character **bbbbbb** displays.
+   (bbbbbb was deleted by the user on 2026-11-04 14:08 and has been
+   restored from `deleted_characters` in saves.db, save included.)
    Fingerprint: B4d=1, B51=2, U40=3, U44=4, U46=5, Level=6, Class=7,
    B4c=8, B4e=9, B4f=10, B50=11 — the displayed Characters row names
    the field. Still row 0 → round 2 varies the 0x15 message-level fields.
