@@ -1018,7 +1018,7 @@ public sealed record PlayerObject(string Name, byte ClassIndex, int GridX, int G
         IReadOnlyList<VaalSoulBudget>? souls = null)
     {
         w.U8((byte)skills.Count);
-        foreach (var s in skills) WriteSkillRecord(w, s);
+        foreach (var s in skills) WriteActorSkillRecord(w, s);
         WriteSoulBudgets(w, souls);
         w.U8(0);            // byte table (empty)
         w.U32(0);           // cooldown groups (none)
@@ -1033,8 +1033,22 @@ public sealed record PlayerObject(string Name, byte ClassIndex, int GridX, int G
     /// <summary>One skill record (<c>0x142196ce0</c>), as the 0x40 list and the 0x20 update carry it.</summary>
     internal static void WriteSkillRecord(BlobWriter w, GrantedSkill s)
     {
-        w.U32(s.Id).U8(0)                      // id (u32 in 0.5.5) and a selector byte
-         .U8(0).U32(s.EffectsPerLevelRow)      // GEPL reference
+        w.U16(s.Id);
+        WriteSkillRecordBody(w, s);
+    }
+
+    /// <summary>The same record as the 0.5.5 Actor creation table reads it (0x142188d50): the id is a u32 and a
+    /// selector byte follows it. The update messages keep the u16 form above until their own 0.5.5 readers are
+    /// reversed.</summary>
+    internal static void WriteActorSkillRecord(BlobWriter w, GrantedSkill s)
+    {
+        w.U32(s.Id).U8(0);
+        WriteSkillRecordBody(w, s);
+    }
+
+    private static void WriteSkillRecordBody(BlobWriter w, GrantedSkill s)
+    {
+        w.U8(0).U32(s.EffectsPerLevelRow)      // GEPL reference
          .U8(0).U32(s.StatSetsPerLevelRow);    // its stat set
         foreach (var (row, _) in s.ExtraStatSets) w.U8(0).U32(row);   // one more stat-set reference per additional set
         // 0x1421975f0: without bit1 a raw Vaal stored-use count makes the constructor zero its soul inputs.
