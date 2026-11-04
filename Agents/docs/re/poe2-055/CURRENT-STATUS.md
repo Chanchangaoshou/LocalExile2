@@ -48,8 +48,15 @@ same commit.
 
 ## Waiting on the NEXT user login (called when ready)
 
-1. **S2 readout** — enter with yyyyyy: in-game, or the same crash VA
-   (then the commit is driven by something later than generation).
+1. **Blob trace session** — S2 itself is PROVEN (17:44: activation,
+   dispatch, type lookup and the entity ctor all fired; the ctor then
+   threw Buffer Underflow in the player blob). Evening7 pinned it:
+   0.5.5 reads **Stats first**; the fork writes Positioned first, so
+   the Stats reader decoded a 327,680-pair map out of the spawn
+   coordinates and ate the blob. Probe v11 (comp_call / stats_gate /
+   comp_order hooks) now harvests the gate value and the full
+   component order in one more enter; the blob rewrite follows from
+   that trace (evening8), per the notes' section 7 plan.
 2. **Class fingerprint (problem 2)**: at the character-select screen,
    note which class the throwaway character **bbbbbb** displays.
    (bbbbbb was deleted by the user on 2026-11-04 14:08 and has been

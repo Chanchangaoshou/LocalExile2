@@ -1044,3 +1044,203 @@ ret
    触发点在游戏状态迁移层（基线同样未达），下一步转查 0x140b6d390/0x140b713f0 两个
    「取得+提交+设为当前」函数的上层调用方与 [rbx+0x310] 持有者（世界管理器）的
    状态迁移条件；字段被写成非 0 怪值 → 以写监视的指令地址为准新开一线。
+
+## 2026-11-04 evening7 — player blob component audit
+
+任务：S2 会话（17:44，bbbbbb，blob 1101 B）实体 ctor 首次运行即抛 Buffer
+Underflow。把 ctor 的组件消费与 fork 的 `PlayerObject.Blob()` 逐项对齐，定
+第一个分叉点。以下地址均为 0.5.5 原始 exe 静态反汇编（已实证 = 逐指令读出；
+推断 / 待验假设逐条标注）。
+
+### 0. 回溯五地址定点（已实证）
+
+| 回溯地址 | 定点 |
+|---|---|
+| 0x141e70750 | ctor 0x141e705d0 内调用 blob 读取子程 fn C（0x141e712a0）的返回址——即 blob 消费在 ctor 的第二阶段（实例化之后）统一进行 |
+| 0x141e7137b | fn C 组件循环内虚调用 `call [comp_vtable+0x98]` 的返回址——抛点位于「某个组件的 read fn」内 |
+| 0x1421811a8 | read fn B（0x142181160）内、其第一 stat map 循环中读取 pair 的 **key** 后调用读助手 A 的返回址 |
+| 0x1419973fe | A 内 `call 0x142c14380`（throw helper，位于 0x1419973f9）的返回址；该抛点 stub 的错误参数 r9d=1 且不设 r8（游标寄存器），是 A 的**首字节读**失败点 |
+| 0x142134f4b / 0x14212fdfe | CreateObject handler / 激活排空（与 evening 世界层结论一致，不再展开） |
+
+抛点形态定性（已实证）：A 在游标**恰好到达 blob 末尾（剩余 0 字节）**时读
+下一个 key 的首字节（1 字节读）失败。即假 pair 循环把 blob 吃到最后一字节、
+再多读一口才抛——不是「读到中段某定长字段不足」。
+
+### 1. ctor 的 blob 消费结构（fn C = 0x141e712a0，已实证）
+
+ctor 0x141e705d0 参数：rcx=entity（rsi）、rdx=&typeInfo、r8d=entityId（edi）、
+r9=&blobSpan（rbp）、第 5 栈参 → [entity+0x78]=world。流程：基类 ctor
+0x142601190 → 清零实体字段、装实体虚表 0x1434D55A8 / facet 0x1434D5568、
+[entity+0x88]=entityId → 实例化子程 0x141e70790（按描述符表建组件实例）→
+对组件向量逐个调 vtable+0x10（rcx-only，非 blob 读，像是 finalize）→
+**fn C(entity, span) 读 blob** → 阶段二（[entity+0x78] vtable+0x1b8 →
+0x141e72a00、0x141e70900）。
+
+span 布局：{+0 begin, +8 end, +0x10 cursor}；每个读点先界检
+（cursor+n > end → 错误构造 0x1421bffd0（r9d=所需字节数）+ throw helper
+0x142c14380 + int3），异常类型对象在 rdata 0x1439FE7B0（"Buffer Underflow"）。
+
+fn C 的读取顺序（逐指令读出）：
+1. **1 字节 object flags**：bit0 → [entity+0x8d] |= 1；bit1 → [entity+0x8d] |= 4。
+2. **base data**（子程 0x141e715a0）：u8 计数 N；每条 = u32 key + u8 kind +
+   按 kind 的负载（0x141e7eb50）。N=0 时不读任何字节（fork 发 0 ✓ 安全）。
+3. **组件循环**（esi = index 0,1,2,…）：上界 = **[[typeInfo+0x28]+0x78]**
+   （描述符对象 D 上的 u64 组件个数；D 同时在 +0x298..+0x2a0 持有描述符
+   向量）。逐个取实体组件向量 [entity+0x10] 的第 esi 个组件，**属主检查
+   [comp+8]==entity** 不满足则跳过，满足则调 **[comp_vtable+0x98](comp, span)**
+   —— 每个组件的 blob read fn。没有固定内联读，顺序完全由类型的组件表
+   （.ot 数据驱动）决定。
+4. **尾段 tasks**：u8 计数 M；M ×（u16 key + 按 key 注册的记录读程
+   0x141e7dd60(entity+0x58, key, span)）。key 无注册读程时 0x141e7dd60 返回
+   false、循环静默终止（不抛）。与旧版文档的 tasks 段同构。
+
+注：0.5.5 的 read 槽是 vtable **+0x98**；旧版（fork 文档 04 §3）是 +0x88
+（slot 17）——虚表布局已移位，旧版任何按槽位推的对应关系都不可直接搬。
+
+### 2. 紧凑整数读助手与 fork 编码等价（已实证）
+
+- **A = 0x141997220，无符号紧凑读**：b0<0x80 → 1 B；(b0&0xC0)==0x80 →
+  ((b0&0x3F)<<8)|b1（2 B）；(b0&0xE0)==0xC0 → ((b0&0x1F)<<16)|…（3 B）；
+  (b0&0xF0)==0xE0 → ((b0&0x1F)<<24)|…（4 B，读侧掩码 0x1F 是 fork 写侧
+  28-bit 的超集，回读兼容）；b0≥0xF0 → 后 4 字节 BE（共 5 B，b0 纯标签）。
+  **≡ fork `CompactUInt`，格式一致。**
+- **0x141e25ed0，有符号紧凑读**（B 的 value 读）：1 B 形 b0&0x40 →
+  value=b0−0x80（−0x40..0x3F），0x80 前缀形 ((b0&0x3F)<<8)|b1 带符号扩展，
+  与 fork `CompactInt` 同族同构。**stat 对 (key, value) = (CompactUInt,
+  CompactInt) 在 fork 与 0.5.5 间格式相同——pair 格式不是分叉点。**
+
+### 3. read fn B 的完整线格式（已实证，逐指令）
+
+B = 0x142181160（this=r13，span=rdi）：
+
+1. **stat map → [this+0x1c8]**：count = A(span)；count ×（key = A(span)，
+   value = 0x141e25ed0(span)，经 0x1426acb60 插入 map）。
+2. **gate G = byte [[this+0x158]+0x20]**（+0x158 由基类构造 0x141dfc350 自
+   类型定义对象设置；G 是定义侧标志，非 blob 内字段）。G≠0 时依次读：
+   a. u8 → [this+0x168]；
+   b. u8 长度 L；L>0 读 L 字节串（0x1423e57f0）→ 引用计数串 [this+0x170]；
+      L=0 → 空串；
+   c. **固定 3 个串槽** [this+0x180..0x1b0)（步长 0x10）：每槽 u8 tag；
+      tag≠0 再读一串（长度参数 = tag−1，经 0x142504fc0；该「−1」语义为
+      待验假设，疑 tag 本身即长度+1 编码）；
+   d. u8 计数 N2（先按 [this+0x1e8] 向量元素 0x10 B 经 0x142119f30 预留
+      容量）；N2 ×（u8 子键 → 0x142181e20 取/建子 stat map → 再读一个
+      完整 stat map（A 计数 + A/S 对）入该子图）；
+   e. 收尾 0x1421817a0(this)。
+   G==0 时 a–e 全跳过（直达第 3 步）。
+3. **公共尾**：u32 → [this+0x1b0]；u8 → [this+0x1b4]；u8 → [this+0x1b5]。
+
+B 的身份（推断，强）：B 的地址在全 exe 只出现一次——rdata **0x14350bb08**，
+恰为虚表 **0x14350ba70 的 +0x98 槽**；该虚表唯一的代码引用是组件构造
+~0x142180c30（装 [this]=0x14350ba70、[this+0x18]=facet 0x14350BBA0、
+[this+0x1b8]=0x14350BA68，并把 +0x1c8 的 stat map 放进一个引用计数子对象
+（虚表 0x14350BBA8））。该类**无 MSVC RTTI**（0x143508000–0x14350bb10 内无
+合法 COL；与 fork 文档「component classes have no RTTI」互证）。身份判定
+依据：在 fork 旧版 schema 里，玩家 10 个组件中**只有 Stats
+（ClientInternalStats，旧读 0x1421c2f40）以 stat map 开场**（Buffs 以 u16
+计数开场、余者为定长/串开场），且旧 Stats 读的骨架 = 对流 + u32+u32+u8 尾
+（空时共 10 B）与 B 的「对流 +（gate 段）+ u32+u8+u8」同构——差异 =
+0.5.5 新增 gate 段、尾部 9 B 改 6 B。**B = 0.5.5 的 Stats 组件 read fn。**
+gate 对 IntFour 的取值静态不可知（定义对象由 .ot 数据在运行时构建），
+须动态读（见 §7）。
+
+### 4. fork blob 逐节字节账（InstanceEntities.cs PlayerObject.Blob()，:898/:941）
+
+写序（旧版组件序，Positioned 被旧版对象类型 ctor 提前到首位）：
+
+| 节 | 内容 | 字节 |
+|---|---|---|
+| 头 | flags U8(0) | 1 |
+| 头 | base data 计数 U8(0) | 1 |
+| Positioned | I32 X + I32 Y + U32(0) + U16(0) + U8(0) + U8(0x02) + Shown 额外 U8(0)+U8(1) | 18 |
+| Stats | CompactU 对数 + Σ(CompactU key + CompactI value) + U32(0)+U32(0)+U8(0) | 变长（空 = 10） |
+| Buffs（原文 comp3） | U16(0) | 2 |
+| Life | 3 × Pool(U32+U32+U16+U32+U32 = 18) + U8(0) | 55 |
+| Animated | U8(1) + WStr32(AO 路径)（无路径时 U8(0)） | 1 + 4 + 2·len |
+| Player（idx 6） | WStr32 名 + U8 职业 + U32 经验 + U32(0) + U16(0) + U16 头像 + FlagSet(任务旗) + FlagSet(联赛旗) + 9×0 + U16 藏身处 ×2 + U8 + 5×U8 + U32 + U8 | 变长 |
+| Inventories（idx 8） | Σ VisibleItem + U8(0) | 变长 |
+| Actor（idx 9） | WStr32("") + U16(0) + U8(0) + U32(0)×2 + 技能/灵魂段 | 变长 |
+| 尾 | tasks U8(0) | 1 |
+| 合计 | bbbbbb 本次会话（网关侧实测） | **1101** |
+
+Pathfinding / PlayerClass 在旧版读 0 字节（ret 桩），fork 不写——若 0.5.5
+仍是桩则无碍（待验）。
+
+### 5. 第一个分叉点
+
+**已实证**：
+- 抛出点在 B 的第一 stat map 循环内（读 key 时、剩余 0 字节）。
+- fork 的 blob 里格式完好的 stat map 只有 Stats 一节。若 B 起点 = fork 的
+  Stats 节起点：count 与全部 pair 按 §2 的等价格式被精确消费（不可能在
+  循环内 underflow）；即使 gate 为开，gate 段会把 fork 尾部 9 个 0 字节
+  吃掉 6 个（u8/len/3×tag/子图计数全 0，合法），随后在公共尾的 u32 读
+  （r9d=4）处抛——抛点形态与实测（pair 循环内、r9d=1）不符。**故 B 的
+  起点不是 fork 的 Stats 节起点。**
+- fork 各节首字节能给出的 count 上限：Positioned 首字节 = GridX 低字节
+  0xC5（出生点 (197,261)，I32 LE = C5 00 00 00）→ A 解出 **327,680 对**
+  （(0xC5&0x1F)<<16），需 ≥ 655,360 B 的 pair 流，blob 仅余 1,099 B →
+  **必然在循环内耗尽**，且耗尽点恰在末尾（每对 ≥ 2 B、约第 ~500 对读
+  key 时剩余归零）——与实测抛点逐项吻合。其余各节首字节（Buffs 0x00、
+  Life 池值低字节、Animated 0x01、Player 名长低字节 0x06、Inventories
+  物品数、Actor 0x00）给出的 count ≤ 31，循环在剩余字节内必能退出，
+  产生不出本回溯。
+
+**推断（强）：第一个分叉点 = 组件循环的 index 0（blob 偏移 2）。**
+0.5.5 对 IntFour 的第一个组件 read 就是 Stats（B），fork 却在该位置写了
+Positioned 的 18 B。即：**0.5.5 的组件序不再把 Positioned 提前**——
+Character.ot 的原生序本就是 `Stats, Positioned, Pathfinding, Buffs, Life,
+Animated, Player, PlayerClass, Inventories, Actor`（fork 文档 04 §3），
+旧版靠对象类型 ctor 把 Positioned 提到首位；该提前行为在 0.5.5 的此路径
+上不成立（或 .ot 继承链已变）。
+
+**待验假设（备选几何，不可静态排除）**：B 仍在 index 1，但 0.5.5 的
+Positioned read 消费 ≠ 18 B、落点恰在 fork Stats 对流中段某个 ≥0xC0 的
+key 字节上。要落到该落点，Positioned 须比 fork 多吃数个字节（旧版 §4.0
+的条件 f32×3 需 flags0&0x20，fork 写 0、不触发）。两几何由 §7 一次判别。
+
+分叉的下游后果（已实证）：B 之后 fork 的全部 8 个数据节（Positioned /
+Buffs / Life / Animated / Player / Inventories / Actor + tasks 尾）从未被
+读到；1,101 B 中除头 2 B 外全被假 pair 循环吞掉。
+
+### 6. 修正后的 blob 布局规范
+
+帧（已与 0.5.5 对齐，fork 现状正确）：`U8 flags`（fork 发 0；bit1 置位会
+给 [entity+0x8d] 加 4，与世界层笔记 §6 的实体图登记条件相关，保持 0、
+待验）+ `base data: U8(0)` 空表 + 组件段 + `tasks: U8(0)` 空尾。
+
+组件段（index 0 起）：
+1. **Stats（read 0x142181160）**——按 0.5.5 重写：
+   - CompactU 对数 + 对流（fork 现有 `Stats()` 数据**可直接复用**：快照
+     属性表；格式已证等价）；
+   - gate 段（**仅当 IntFour 的 gate≠0 时存在**，§7 定值后二选一）：
+     全空安全形 = `U8(0)`（+0x168）+ `U8(0)`（空串）+ `U8(0)×3`（串槽
+     tag）+ `U8(0)`（子图计数）= 6 个 0 字节——B 的读代码对每一项都显式
+     处理空（len 0 → 空串、tag 0 → 跳过、计数 0 → 无子图），不猜；
+   - 公共尾：`U32(0) + U8(0) + U8(0)`（6 B）——**删除旧尾 U32+U32+U8 的
+     第二个 U32、多出的 3 B 必须去掉**。
+2. **Positioned 及其后组件**：0.5.5 read fn 均未逐个静态定版（无 RTTI、
+   顺序由 .ot 决定）。fork 的旧版格式（Positioned 18 B / Buffs 2 B /
+   Life 55 B / Animated / Player / Inventories / Actor）只能作基线假设，
+   须按 §7 的走序 trace 拿到每节的 (read fn, 实际消费) 后逐个静态对格式
+   再定版——在此之前不要整包上线试。
+
+### 7. 无数据来源清单与一次性判别方案
+
+**fork 无数据来源、须写安全空形的字段**（全部在 Stats gate 段内）：
++0x168 的 u8、+0x170 的名字串、+0x180 起 3 个串槽、按 u8 子键的 stat map
+群。空形写法以 B 的读代码为准（见 §6.1），均为 0/空、合法。其余组件
+（Positioned 坐标、Stats 对流、Life 三池、Animated AO 路径、Player
+名/职业/任务旗、Inventories 物品、Actor 技能）fork 均有数据来源，问题
+在 0.5.5 格式未验，不在无源。base data 与 tasks 两段 fork 发空表（0）
+本身就是 0.5.5 的合法空形（已实证）。
+
+**判别方案（一次会话定三件事，不要求进图成功）**：
+1. 钩 fn C 的虚调用点 0x141e71375：入口记 esi=index、[rcx]=组件虚表、
+   span 游标偏移（[rdx+0x10]−[rdx]），返回再记游标 → 0.5.5 实际组件序、
+   每节 read fn 与实际消费字节一次拿全（分叉几何、组件序、各节长度
+   同时定案）。
+2. 钩 B 入口 0x142181160：读 [[rcx+0x158]+0x20] 定 gate；并核对其
+   index（与第 1 项互证 B 是否 index 0）。
+3. 钩基类 ctor 0x142601190 返回后（或 0x142601300）：dump
+   [entity+0x10..+0x18) 各组件的 [comp] 虚表序列 → 组件序全表；选角
+   界面的预览实体若走同一构造，不开实例连接即可采集。

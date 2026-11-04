@@ -343,3 +343,57 @@ Interceptor.attach(at('0x1416820b1'), {
   }
 });
 send({ ev: 'v10_armed' });
+
+// ---- v11: blob component trace (evening7 section 7) ----
+// (1) fn C's component-loop virtual call site: per iteration log the index,
+//     the component vtable and the span cursor; successive deltas give each
+//     component's actual consumption. fn C's exit logs the final cursor.
+let lastCursor = null;
+Interceptor.attach(at('0x141e71375'), {
+  onEnter(args) {
+    let idx = -1, vtbl = null, cursor = null;
+    try {
+      idx = this.context.rsi.toInt32() & 0xffff;
+      vtbl = this.context.rcx.readPointer().toString();
+      const span = this.context.rdx;
+      cursor = span.add(0x10).readPointer().sub(span.readPointer()).toInt32();
+    } catch (e) {}
+    send({ ev: 'comp_call', idx, vtbl, cursor, prev: lastCursor });
+    lastCursor = cursor;
+  }
+});
+Interceptor.attach(at('0x141e712a0'), {
+  onLeave(retval) { send({ ev: 'fnC_done', lastCursor }); }
+});
+// (2) Stats reader B entry: the gate is a byte in the type-definition-side
+//     object reached via [rcx+0x158]+0x20 - read it before any consumption.
+Interceptor.attach(at('0x142181160'), {
+  onEnter(args) {
+    let gate = null, vtbl = null;
+    try {
+      vtbl = this.context.rcx.readPointer().toString();
+      gate = this.context.rcx.add(0x158).readPointer().add(0x20).readU8();
+    } catch (e) {}
+    send({ ev: 'stats_gate', gate, vtbl });
+  }
+});
+// (3) base ctor return: dump the entity's component vtable sequence
+//     ([entity+0x10]..[entity+0x18] is the component pointer range).
+function dumpComps(tag, ent) {
+  try {
+    const begin = ent.add(0x10).readPointer();
+    const end = ent.add(0x18).readPointer();
+    const n = end.sub(begin).toInt32() / 8;
+    let seq = [];
+    for (let i = 0; i < n && i < 32; i++) {
+      const comp = begin.add(i * 8).readPointer();
+      seq.push(comp.isNull() ? '0' : comp.readPointer().toString());
+    }
+    send({ ev: 'comp_order', tag, n, seq });
+  } catch (e) { send({ ev: 'comp_order', tag, err: '' + e }); }
+}
+Interceptor.attach(at('0x142601190'), {
+  onEnter(args) { this.ent = this.context.rcx; },
+  onLeave(retval) { if (this.ent) dumpComps('base_ctor_1190', this.ent); }
+});
+send({ ev: 'v11_armed' });
