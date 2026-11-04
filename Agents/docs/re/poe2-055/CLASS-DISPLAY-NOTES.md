@@ -150,3 +150,21 @@ Portrait=0）实际发出：
 - 可选同场 Frida（不必单独占一轮）：钩条目读函数 0x142716700 onLeave，记录条目对象地址及 +0x40..+0x51 原始字节
   （确认线上字节未被中间层改写）；钩 0x15 读函数 0x14214e210 onLeave，记录报文对象 +0x68..+0x76 与 Pairs 内容。
 - 定案后：撤除 52de3f8 探针，CharacterEntries 按定案字段发送，并把字段语义写回 LoginMessages.cs 注释（注明 0.5.5 证据）。
+
+## 7. Verdict (2026-11-04 17:44 live session, proven)
+
+The §6.6 fingerprint ran on the restored carrier bbbbbb (B4d=1, B51=2,
+U40=3, U44=4, U46=5, Level=6, Class=7, B4c=8, **B4e=9**, B4f=10, B50=11).
+The user reported the screen showed **Mercenary — Characters row 9**,
+with the matching (wrong-for-a-Witch) portrait. Only B4e carried the
+value 9, so:
+
+- **B4e (entry byte at +0x4e) is the Characters row the select screen
+  displays** — class name and, by the user's portrait report, the
+  portrait too (the §6.5 inference that both follow one row number).
+- Fix deployed (commit 5aca40d, Auth exe 2026-11-04 17:51:56): every
+  character sends B4e = its real classId; the fingerprint branch is
+  removed. Awaiting only visual confirmation at the next login.
+- Open detail: the user also reported the displayed level was wrong
+  but did not note the number; whether the level comes from +0x48
+  (sent 6) stays unconfirmed — check on the next look.
