@@ -279,7 +279,13 @@ public sealed class LoginServerSession(AccountService accounts)
     private ListEntry15[] CharacterEntries() =>
         Session is null ? [] :
         [.. accounts.Characters(Session.AccountId).Select(c =>
-            // U46 (+0x46) is the portrait variation the character screen draws (0x14082e210 → 0x142426b00).
-            new ListEntry15(c.Name, c.League, 0, 0, 0, (uint)(c.ClassId >= 0 ? c.ClassId : (int)c.Class), 0, 0, c.Portrait,
+            // 0.5.5 re-derivation (CLASS-DISPLAY-NOTES.md): the wire order matches the client reader
+            // 0x142716700 exactly, but the PoE1-era field labels were never verified on 0.5.5. U40 was
+            // excluded by live experiment (5c87704); with a Witch the only zero u16 fields left are
+            // U44/U46, so the select screen's class must be one of them. Discriminating probe: U44
+            // carries the class, U46 carries class+5 (clamped) — one look at the screen settles which.
+            new ListEntry15(c.Name, c.League, 0, 0, 0, (uint)(c.ClassId >= 0 ? c.ClassId : (int)c.Class), 0,
+                (ushort)(c.ClassId >= 0 ? c.ClassId : (int)c.Class),
+                (ushort)Math.Clamp((c.ClassId >= 0 ? c.ClassId : (int)c.Class) + 5, 0, 11),
                 (ushort)Math.Clamp(c.Level, 0, 65535), (ushort)(c.ClassId >= 0 ? c.ClassId : (int)c.Class), 0, 0))];
 }
