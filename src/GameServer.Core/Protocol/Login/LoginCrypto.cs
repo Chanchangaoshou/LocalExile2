@@ -104,6 +104,7 @@ public static class KmProbe
     {
         Span<byte> tb = stackalloc byte[4];
         BinaryPrimitives.WriteUInt32BigEndian(tb, ticket);
+        log($"{tag} raw materials: k={Convert.ToHexString(ticketKey)} l={(loginKm is { Length: 64 } ? Convert.ToHexString(loginKm) : "-")}");
         var mats = new List<(string Name, byte[] Km)> { ("ticket", ticketKey) };
         if (loginKm is { Length: 64 })
         {
