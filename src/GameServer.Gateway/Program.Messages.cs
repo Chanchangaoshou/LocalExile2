@@ -616,6 +616,14 @@ partial class Program
                     // stay unused until each message is reversed.
                     RecordVisit(conn);
                     await SendPlayerObject55(remote, stream, ciphers, conn);
+                    // S2 (SOLUTION-PLAN 3.2 + evening4): with the CreateObject queued behind the closed
+                    // dispatch gate, the content/state application (0x23) is the activation trigger —
+                    // its handler calls the world aggregate's main-vtable +0x1f0, whose first instruction
+                    // activates the world and drains the queue. Value 1000 is the neutral point of its
+                    // one known consumer (value/1000 clamps the render resolution scale). Sent only
+                    // here, after the 0x9a — never in the connection burst, where the same message
+                    // fired activation mid-generation in the 2026-11-04 16:16 crash.
+                    await Send(remote, stream, ciphers, InstanceProtocol.Content(), "0x0023 content/state after 0x9a (value 1000)");
                     conn.PlayerSent = true;
                 }
             }
