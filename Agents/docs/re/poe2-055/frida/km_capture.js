@@ -440,3 +440,24 @@ Interceptor.attach(at('0x1421474df'), {
   onEnter(args) { send({ ev: 'seg4_tail', rcx: spanCur(this.context.rcx), rdx: spanCur(this.context.rdx), rbx: spanCur(this.context.rbx), rsi: spanCur(this.context.rsi) }); }
 });
 send({ ev: 'v14_armed' });
+
+// ---- v15: post-registration AV localization (evening12) ----
+function rd(p, off) { try { return p.add(off).readPointer().toString(); } catch (e) { return 'ERR'; } }
+function regsDump(c) {
+  const r = { rax: c.rax, rbx: c.rbx, rcx: c.rcx, rdx: c.rdx, rsi: c.rsi, rdi: c.rdi, r8: c.r8, r9: c.r9, r12: c.r12, r13: c.r13, r14: c.r14, r15: c.r15 };
+  const o = {};
+  for (const k in r) { o[k] = r[k].toString(); o[k + '_deref'] = rd(r[k], 0); o[k + '_188'] = rd(r[k], 0x188); }
+  return o;
+}
+Interceptor.attach(at('0x1401506e0'), { onEnter(args) { send({ ev: 'flagset_exp', rcx: this.context.rcx.toString(), rcx0: rd(this.context.rcx, 0), rcx8: rd(this.context.rcx, 8), ret: this.returnAddress.toString() }); } });
+Interceptor.attach(at('0x140125e8e'), { onEnter(args) { send({ ev: 'walk_E', regs: regsDump(this.context) }); } });
+Interceptor.attach(at('0x1401256d0'), { onEnter(args) { send({ ev: 'agg_walk', rdx: this.context.rdx.toString(), r8: this.context.r8.toString(), rcx: this.context.rcx.toString() }); } });
+Interceptor.attach(at('0x1416292a0'), { onEnter(args) { send({ ev: 'refclean', rcx: this.context.rcx.toString(), vt: rd(this.context.rcx, 0), p340: rd(this.context.rcx, 0x340), p348: rd(this.context.rcx, 0x348) }); } });
+Interceptor.attach(at('0x14013bbf0'), { onEnter(args) { send({ ev: 'list_iter', rcx: this.context.rcx.toString(), rdx: this.context.rdx.toString() }); } });
+Interceptor.attach(at('0x142627440'), { onEnter(args) { send({ ev: 'ctor_throw', regs: regsDump(this.context) }); } });
+Interceptor.attach(at('0x141e74740'), { onEnter(args) { send({ ev: 'ctor_tail', rcx: this.context.rcx.toString(), rdx: this.context.rdx.toString() }); } });
+Interceptor.attach(at('0x141DA66C0'), { onEnter(args) { send({ ev: 'anim_read', rcx: this.context.rcx.toString() }); } });
+Interceptor.attach(at('0x140BC8280'), { onLeave(ret) { send({ ev: 'res_lookup', ret: ret.toString() }); } });
+Interceptor.attach(at('0x141D2C750'), { onEnter(args) { send({ ev: 'ao_ctor', rcx: this.context.rcx.toString(), rdx: this.context.rdx.toString() }); } });
+Interceptor.attach(at('0x1421232bf'), { onEnter(args) { send({ ev: 'walk_after_23', rcx: this.context.rcx.toString() }); } });
+send({ ev: 'v15_armed' });
