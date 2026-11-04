@@ -27,12 +27,14 @@ sealed class InstanceDirectory(InstanceRegistry registry, AccountService? accoun
     private readonly ConcurrentDictionary<string, LoginLink> _links = new(StringComparer.OrdinalIgnoreCase);
 
     public sealed record TicketInfo(string Character, ulong Instance, ushort Area, League? League, CharacterClass Class,
-        int Level, Guid? CharacterId);
+        int Level, Guid? CharacterId, byte[]? LoginKeyMaterial = null);
 
     /// <summary>A logged-in client's login connection. Writes go through <see cref="SendAsync"/> (the reply loop and the
     /// control server both write).</summary>
     public sealed class LoginLink(NetworkStream stream, ConnectionCiphers ciphers, LoginServerSession session, string peer)
     {
+        /// <summary>The login connection's 64-byte key material (set by Auth's handshake handling).</summary>
+        public byte[] KeyMaterial { get; init; } = [];
         private readonly SemaphoreSlim _lock = new(1, 1);
         public LoginServerSession Session => session;
         public string Peer => peer;
@@ -74,7 +76,8 @@ sealed class InstanceDirectory(InstanceRegistry registry, AccountService? accoun
         }
         uint ticket = session.Keyring.NewTicket();
         _tickets[ticket] = new TicketInfo(character, inst.Id, inst.AreaHash, session.CharacterLeague, session.CharacterClass,
-            session.CharacterLevel, session.CharacterId);
+            session.CharacterLevel, session.CharacterId,
+            _links.TryGetValue(character, out var issuingLink) && issuingLink.KeyMaterial.Length == 64 ? issuingLink.KeyMaterial : null);
         _latest[character] = ticket;
         Console.WriteLine($"[auth] ticket 0x{ticket:x8}: {character} → instance {inst.Id} (area 0x{inst.AreaHash:x4}, seed {inst.Seed}, {inst.Players.Count} player(s))");
         return ticket;
@@ -150,6 +153,7 @@ sealed class InstanceDirectory(InstanceRegistry registry, AccountService? accoun
                     League = info.League?.Name, Hardcore = info.League?.Hardcore ?? false,
                     Ssf = info.League?.Ssf ?? false, Ruthless = info.League?.Ruthless ?? false,
                     Class = (int)info.Class, Level = info.Level,
+                    LoginKeyMaterial = info.LoginKeyMaterial is { Length: 64 } loginKm ? Convert.ToBase64String(loginKm) : null,
                     LastTown = accounts?.FindCharacter(info.Character)?.LastTown is { } last
                         && _towns.FirstOrDefault(t => t.Id == last) is { Id: not null } known ? known.Hash16 : (ushort)0,
                 };

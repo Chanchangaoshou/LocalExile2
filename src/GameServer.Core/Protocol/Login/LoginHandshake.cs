@@ -47,6 +47,9 @@ public sealed record KeyExchange(byte[] Key, byte[] Signature) : ILoginMessage
 /// <summary>Server side of the login key exchange (inverse of client 0x14213e610 / 0x140e03630).</summary>
 public sealed class ServerHandshake(LoginServerKeys keys)
 {
+    /// <summary>The 64-byte key material of the last <see cref="Respond"/> (the login connection's km).</summary>
+    public byte[] KeyMaterial { get; private set; } = [];
+
     /// <summary>Answers a client's 0x0002; returns the reply to send in plaintext and the ciphers for everything after it.</summary>
     public (byte[] Reply, ConnectionCiphers Ciphers) Respond(KeyExchange hello)
     {
@@ -57,7 +60,8 @@ public sealed class ServerHandshake(LoginServerKeys keys)
         byte[] pub = Big.ToFixed(eph.PublicFor(e), eph.ElementLength);
         byte[] zStatic = stat.Agree(keys.ServerStaticPrivate, keys.ClientStaticPublic);
         byte[] zEph = eph.Agree(e, Big.FromBigEndian(hello.Key));
-        var ciphers = new ConnectionCiphers(LoginKdf.KeyMaterial(zStatic, zEph), isClient: false);
+        KeyMaterial = LoginKdf.KeyMaterial(zStatic, zEph);
+        var ciphers = new ConnectionCiphers(KeyMaterial, isClient: false);
         return (new KeyExchange(pub, keys.Signing.Sign(pub)).Encode(), ciphers);
     }
 }

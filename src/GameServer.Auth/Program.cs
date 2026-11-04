@@ -173,7 +173,8 @@ static async Task HandleConnection(TcpClient tcp, LoginServerKeys keys, AccountS
             }
             Console.WriteLine($"[auth] {peer} 0x0002 client key {hello!.Key.Length} bytes, sig {hello.Signature.Length} bytes");
 
-            var (reply, ciphers) = new ServerHandshake(keys).Respond(hello);
+            var handshake = new ServerHandshake(keys);
+            var (reply, ciphers) = handshake.Respond(hello);
             await stream.WriteAsync(reply);
             Console.WriteLine($"[auth] {peer} key exchange answered; traffic is now Salsa20");
 
@@ -181,7 +182,7 @@ static async Task HandleConnection(TcpClient tcp, LoginServerKeys keys, AccountS
             var incoming = new LoginMessageStream(LoginDirection.ClientToServer);
             InstanceDirectory.LoginLink? link = null;
             var session = new LoginServerSession(accounts) { Keyring = keyring, Leagues = LeagueCatalog.FromEnvironment(), CharacterDeleted = SetSaveAside, Assign = s => directory.AssignStart(s, link!) };
-            link = new InstanceDirectory.LoginLink(stream, ciphers, session, peer);
+            link = new InstanceDirectory.LoginLink(stream, ciphers, session, peer) { KeyMaterial = handshake.KeyMaterial };
             byte[] rest = buf[used..have];
             try
             {

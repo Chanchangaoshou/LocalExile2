@@ -116,6 +116,16 @@ partial class Program
                 Console.WriteLine($"[gateway] {remote} ticket 0x{ticket:x8}: {resolved.Character ?? "?"} → instance {instanceId}, {layout.Describe()}");
 
                 ConnectionCiphers ciphers = keyring.Ciphers(opening.Ticket);
+                if (Environment.GetEnvironmentVariable("Game_INSTANCE_KEYMODE") == "login" &&
+                    resolved.LoginKeyMaterial is { Length: > 0 } loginKmText &&
+                    Convert.TryFromBase64String(loginKmText, new byte[64], out int loginKmWritten) && loginKmWritten == 64)
+                {
+                    // Recon (2026-11-04): the 0.5.5 client's instance keystream matches no arrangement of the
+                    // ticket key, so try the login connection's key material for the instance ciphers.
+                    byte[] loginKm = Convert.FromBase64String(loginKmText);
+                    ciphers = new ConnectionCiphers(loginKm, isClient: false);
+                    Console.WriteLine($"[gateway] {remote} instance ciphers from LOGIN key material (Game_INSTANCE_KEYMODE=login)");
+                }
                 await stream.WriteAsync(InstanceProtocol.StartEncryption());
                 Console.WriteLine($"[gateway] {remote} => 0x0011 (start encryption)");
 
