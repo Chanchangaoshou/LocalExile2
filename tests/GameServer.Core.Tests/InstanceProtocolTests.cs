@@ -7,22 +7,22 @@ namespace GameServer.Core.Tests;
 
 public class InstanceProtocolTests
 {
-    // The first bytes a real 3.29.3b client sent to the instance server after 0x14 (127.0.0.1, ticket 0), 2026-10-16.
-    private static readonly byte[] RealOpening = Convert.FromHexString("000F00000000000E76240850BFE2B4956AD1D6B07F000001000000004001");
+    // The first bytes a real 0.5.5 client sent to the instance server after 0x14 (ticket 0x48ce8271), live capture 2026-11-04.
+    private static readonly byte[] RealOpening = Convert.FromHexString("000F48CE8271000E995DF4B1DB347FED6AEA795B7F0000010000000001");
 
     [Fact]
     public void Real_opening_parses_as_ticket_then_hello()
     {
         var o = InstanceProtocol.TryReadOpening(RealOpening)!;
-        Assert.Equal(0u, o.Ticket);
-        Assert.Equal("76240850BFE2B4956AD1D6B0", Convert.ToHexString(o.Digest));
-        Assert.Equal((0x7F000001u, 0u, (byte)0x40, (byte)1), (o.Address, o.U32_128, o.Realm, o.Flag));
+        Assert.Equal(0x48CE8271u, o.Ticket);
+        Assert.Equal("995DF4B1DB347FED6AEA795B", Convert.ToHexString(o.Digest));
+        Assert.Equal((0x7F000001u, 0u, (byte)0, (byte)1), (o.Address, o.U32_128, o.Realm, o.Flag));
     }
 
     [Fact]
-    public void Opening_needs_all_30_bytes_and_starts_with_0x0f()
+    public void Opening_needs_all_29_bytes_and_starts_with_0x0f()
     {
-        Assert.Null(InstanceProtocol.TryReadOpening(RealOpening.AsSpan(0, 29)));
+        Assert.Null(InstanceProtocol.TryReadOpening(RealOpening.AsSpan(0, 28)));
         byte[] bad = [.. RealOpening];
         bad[1] = 0x0e;
         Assert.Throws<InvalidDataException>(() => InstanceProtocol.TryReadOpening(bad));

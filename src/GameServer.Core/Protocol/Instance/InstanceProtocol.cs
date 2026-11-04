@@ -15,8 +15,9 @@ public static class InstanceProtocol
 {
     public const ushort TicketId = 0x0f, HelloId = 0x0e, StartEncryptionId = 0x11, AreaInstanceId = 0x1d, EnterAreaId = 0x21;
 
-    /// <summary>Length of the client's plaintext opening: 0x0F (2 + 4) followed by 0x0E (2 + 12 + 4 + 4 + 1 + 1).</summary>
-    public const int OpeningLength = 30;
+    /// <summary>Length of the client's plaintext opening: 0x0F (2 + 4) followed by 0x0E (2 + 12 + 4 + 4 + 1).
+    /// The 0.5.5 client sends no realm byte (the PoE1 client's opening had one: 30 bytes).</summary>
+    public const int OpeningLength = 29;
 
     /// <summary>S→C 0x11 (no fields, class 0x14316c930): switches both directions to Salsa20.</summary>
     public static byte[] StartEncryption() => new LoginWriter().U16(StartEncryptionId).ToArray();
@@ -462,7 +463,7 @@ public static class InstanceProtocol
         if (r.U16() != TicketId) throw new InvalidDataException("instance connection must start with 0x000F");
         uint ticket = r.U32();
         if (r.U16() != HelloId) throw new InvalidDataException("expected 0x000E after 0x000F");
-        return new InstanceOpening(ticket, r.Fixed(12), r.U32(), r.U32(), r.U8(), r.U8());
+        return new InstanceOpening(ticket, r.Fixed(12), r.U32(), r.U32(), 0, r.U8());
     }
 }
 
@@ -515,7 +516,8 @@ public sealed record AreaInstance(uint InstanceId, ushort AreaHash, uint Seed, b
 /// <summary>
 /// C→S 0x0F + 0x0E. Ticket is login 0x14's u32 at +0x38. Digest: 12 bytes the client computes over a constant 8 bytes,
 /// 0x14's Data8 and the u32 _time64 (0x141fe1570 family, algorithm not identified yet). Address is 0x14's u32 at +0x34.
-/// U32_128 is always 0, Realm is 0x40 (international) and Flag is global 0x14458e79f.
+/// U32_128 is always 0 and Flag is 1. The 0.5.5 opening (live capture 2026-11-04) has no realm byte;
+/// Realm stays in the record, always 0, for the log line.
 /// </summary>
 public sealed record InstanceOpening(uint Ticket, byte[] Digest, uint Address, uint U32_128, byte Realm, byte Flag);
 
