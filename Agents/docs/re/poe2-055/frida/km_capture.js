@@ -650,3 +650,89 @@ safeAttach('alloc', '0x142bba600', {
   }
 });
 send({ ev: 'v20_armed' });
+
+// ---- v21: dispatch-chain decide set (evening18) ----
+function gU8(p, off) { try { return p.add(off).readU8().toString(); } catch (e) { return 'ERR'; } }
+function gU16(p, off) { try { return p.add(off).readU16().toString(); } catch (e) { return 'ERR'; } }
+function gU32(p, off) { try { return p.add(off).readU32().toString(); } catch (e) { return 'ERR'; } }
+function gP(p, off) { try { return p.add(off).readPointer().toString(); } catch (e) { return 'ERR'; } }
+var wfCount21 = {};
+safeAttach('wfactory', '0x142186c20', {
+  onEnter(args) {
+    const id = this.context.r8.toInt32() & 0xffff;
+    wfCount21[id] = (wfCount21[id] || 0) + 1;
+    send({ ev: 'wfactory', id: id, n: wfCount21[id], a0: args[0].toString(), a1: args[1].toString(), ra: this.returnAddress.toString() });
+  }
+});
+safeAttach('dispatcher', '0x1421343c0', {
+  onEnter(args) {
+    const w = args[0], m = args[1];
+    send({ ev: 'dispatcher', gate: gU8(w, 0x84a), mid: gU16(m, 8), q0: gP(w, 0x6b0), q1: gP(w, 0x6b8), q2: gP(w, 0x6c8), ra: this.returnAddress.toString() });
+  }
+});
+safeAttach('h23', '0x14212306d', {
+  onEnter(args) {
+    let agg = 'ERR', vt = 'ERR';
+    try { const s = this.context.r15; agg = s.add(0x20f0).readPointer().toString(); vt = ptr(agg).readPointer().toString(); } catch (e) {}
+    send({ ev: 'h23', r15: this.context.r15.toString(), a0: args[0].toString(), a1: args[1].toString(), agg: agg, vt: vt, v1f8_a0: gU32(args[0], 0x1f8), v1f8_a1: gU32(args[1], 0x1f8), ra: this.returnAddress.toString() });
+  }
+});
+safeAttach('activate', '0x14212fd90', {
+  onEnter(args) { send({ ev: 'act_in', q0: gP(args[0], 0x6b0), q1: gP(args[0], 0x6b8), gate: gU8(args[0], 0x84a), ra: this.returnAddress.toString() }); },
+  onLeave(ret) { send({ ev: 'act_out', ret: ret.toString() }); }
+});
+var updN = 0, drnN = 0;
+safeAttach('wupdate', '0x142130840', {
+  onEnter(args) { updN++; if (updN <= 3 || updN % 500 === 0) send({ ev: 'wupdate_cnt', n: updN }); }
+});
+safeAttach('drain', '0x142130360', {
+  onEnter(args) {
+    drnN++;
+    if (drnN <= 10 || drnN % 200 === 0) {
+      send({ ev: 'drain', n: drnN, gate: gU8(args[0], 0x84a), s0: gU32(args[0], 0x14) + '/' + gU8(args[0], 0x18) + '/' + gU16(args[0], 0x1a), s1: gU32(args[1], 0x14) + '/' + gU8(args[1], 0x18) + '/' + gU16(args[1], 0x1a) });
+    }
+  }
+});
+var MAIN_VT = at('0x14339d1d0').toString(), WORLD_VT = at('0x1435083e8').toString();
+var tickN = 0;
+function tickCall(tag, va) {
+  safeAttach(tag, va, {
+    onEnter(args) {
+      tickN++;
+      const c = this.context;
+      const regs = { rcx: c.rcx, rdx: c.rdx, rbx: c.rbx, rsi: c.rsi, rdi: c.rdi, r8: c.r8, r9: c.r9 };
+      let hit = '';
+      for (const k in regs) {
+        try { const v = regs[k].readPointer().toString(); if (v === MAIN_VT || v === WORLD_VT) { hit = k + '=' + v; break; } } catch (e) {}
+      }
+      if (hit) send({ ev: 'tick448', tag: tag, hit: hit, n: tickN });
+      else if (tickN <= 5 || tickN % 500 === 0) send({ ev: 'tick448_cnt', tag: tag, n: tickN });
+    }
+  });
+}
+tickCall('tick448a', '0x14218c218');
+tickCall('tick448b', '0x14218c26d');
+var raCount = {};
+safeAttach('rowapp_ra', '0x14140ea70', {
+  onEnter(args) {
+    const ra = this.returnAddress.toString();
+    raCount[ra] = (raCount[ra] || 0) + 1;
+    send({ ev: 'rowapp_ra', ra: ra, n: raCount[ra] });
+  }
+});
+var factN = 0, factRa = {};
+safeAttach('fact_ra', '0x1415d7710', {
+  onEnter(args) {
+    factN++;
+    const ra = this.returnAddress.toString();
+    factRa[ra] = (factRa[ra] || 0) + 1;
+    if (factN % 1000 === 0) send({ ev: 'fact_ra', n: factN, sample_ra: ra, map: JSON.stringify(factRa) });
+  }
+});
+safeAttach('commit', '0x14167b3f0', {
+  onEnter(args) { send({ ev: 'commit', t: Date.now(), a0: args[0].toString(), ra: this.returnAddress.toString() }); }
+});
+safeAttach('commitwrap', '0x140b99180', {
+  onEnter(args) { send({ ev: 'commitwrap', t: Date.now(), a0: args[0].toString(), ra: this.returnAddress.toString() }); }
+});
+send({ ev: 'v21_armed' });
