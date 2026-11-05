@@ -960,7 +960,8 @@ inOut29('visit29', '0x14169c8a0');
 inOut29('ensure29', '0x141681720');
 inOut29('reglookup29', '0x141693840');
 try {
-  const unw = Module.getExportByName('ntdll.dll', 'RtlUnwindEx');
+  const unw = Module.findExportByName('ntdll.dll', 'RtlUnwindEx');
+  if (!unw) throw new Error('RtlUnwindEx not found');
   Interceptor.attach(unw, { onEnter(args) { let tid = -1; try { tid = this.threadId; } catch (e) {} send({ ev: 'unwind29', tid: tid, ra: this.returnAddress.toString() }); } });
 } catch (e) { send({ ev: 'unwind29_nohook', err: String(e).substring(0, 80) }); }
 let tickStream29 = '';
@@ -976,7 +977,8 @@ function logSmallSend(tag, total, firstBuf, ra, tid) {
   } else if (wsacnt29 % 1000 === 0) send({ ev: 'wsasend29_cnt', n: wsacnt29 });
 }
 try {
-  const ws = Module.getExportByName('ws2_32.dll', 'WSASend');
+  const ws = Module.findExportByName('ws2_32.dll', 'WSASend');
+  if (!ws) throw new Error('WSASend not found');
   Interceptor.attach(ws, { onEnter(args) {
     try {
       let cnt = args[2].toInt32(); let total = 0; let first = null;
@@ -986,7 +988,8 @@ try {
   } });
 } catch (e) { send({ ev: 'wsasend29_nohook', err: String(e).substring(0, 80) }); }
 try {
-  const snd = Module.getExportByName('ws2_32.dll', 'send');
+  const snd = Module.findExportByName('ws2_32.dll', 'send');
+  if (!snd) throw new Error('send not found');
   Interceptor.attach(snd, { onEnter(args) {
     try { let l = args[2].toInt32(); let tid = -1; try { tid = this.threadId; } catch (e) {} logSmallSend('send29', l, args[1], this.returnAddress.toString(), tid); } catch (e) {}
   } });
