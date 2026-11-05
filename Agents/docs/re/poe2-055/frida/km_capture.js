@@ -959,10 +959,12 @@ function inOut29(tag, va) {
 inOut29('visit29', '0x14169c8a0');
 inOut29('ensure29', '0x141681720');
 inOut29('reglookup29', '0x141693840');
+let expFlags30 = { unw: false, ws: false, snd: false };
+let expTries30 = 0;
 try {
   const unw = Module.findExportByName('ntdll.dll', 'RtlUnwindEx');
   if (!unw) throw new Error('RtlUnwindEx not found');
-  Interceptor.attach(unw, { onEnter(args) { let tid = -1; try { tid = this.threadId; } catch (e) {} send({ ev: 'unwind29', tid: tid, ra: this.returnAddress.toString() }); } });
+  Interceptor.attach(unw, { onEnter(args) { let tid = -1; try { tid = this.threadId; } catch (e) {} send({ ev: 'unwind29', tid: tid, ra: this.returnAddress.toString() }); } }); expFlags30.unw = true;
 } catch (e) { send({ ev: 'unwind29_nohook', err: String(e).substring(0, 80) }); }
 let tickStream29 = '';
 safeAttach('tickstream29', '0x142120cf0', {
@@ -985,13 +987,38 @@ try {
       for (let i = 0; i < Math.min(cnt, 8); i++) { let b = args[1].add(i * 16); let l = b.readU32(); total += l; if (i === 0) first = b.add(8).readPointer(); }
       let tid = -1; try { tid = this.threadId; } catch (e) {} logSmallSend('wsasend29', total, first, this.returnAddress.toString(), tid);
     } catch (e) {}
-  } });
+  } }); expFlags30.ws = true;
 } catch (e) { send({ ev: 'wsasend29_nohook', err: String(e).substring(0, 80) }); }
 try {
   const snd = Module.findExportByName('ws2_32.dll', 'send');
   if (!snd) throw new Error('send not found');
   Interceptor.attach(snd, { onEnter(args) {
     try { let l = args[2].toInt32(); let tid = -1; try { tid = this.threadId; } catch (e) {} logSmallSend('send29', l, args[1], this.returnAddress.toString(), tid); } catch (e) {}
-  } });
+  } }); expFlags30.snd = true;
 } catch (e) { send({ ev: 'send29_nohook', err: String(e).substring(0, 80) }); }
+function retryExports30() {
+  expTries30++;
+  if (expFlags30.unw && expFlags30.ws && expFlags30.snd) return;
+  if (expTries30 > 12) { send({ ev: 'export30_gaveup', unw: expFlags30.unw, ws: expFlags30.ws, snd: expFlags30.snd }); return; }
+  if (!expFlags30.unw) { try { const u = Module.findExportByName('ntdll.dll', 'RtlUnwindEx'); if (u) { Interceptor.attach(u, { onEnter(args) { let tid = -1; try { tid = this.threadId; } catch (e) {} send({ ev: 'unwind29', tid: tid, ra: this.returnAddress.toString() }); } }); expFlags30.unw = true; send({ ev: 'unwind29_hooked' }); } } catch (e) {} }
+  if (!expFlags30.ws) { try { const w = Module.findExportByName('ws2_32.dll', 'WSASend'); if (w) { Interceptor.attach(w, { onEnter(args) { try { let cnt = args[2].toInt32(); let total = 0; let first = null; for (let i = 0; i < Math.min(cnt, 8); i++) { let b = args[1].add(i * 16); let l = b.readU32(); total += l; if (i === 0) first = b.add(8).readPointer(); } let tid = -1; try { tid = this.threadId; } catch (e) {} logSmallSend('wsasend29', total, first, this.returnAddress.toString(), tid); } catch (e) {} } }); expFlags30.ws = true; send({ ev: 'wsasend29_hooked' }); } } catch (e) {} }
+  if (!expFlags30.snd) { try { const sn = Module.findExportByName('ws2_32.dll', 'send'); if (sn) { Interceptor.attach(sn, { onEnter(args) { try { let l = args[2].toInt32(); let tid = -1; try { tid = this.threadId; } catch (e) {} logSmallSend('send29', l, args[1], this.returnAddress.toString(), tid); } catch (e) {} } }); expFlags30.snd = true; send({ ev: 'send29_hooked' }); } } catch (e) {} }
+  setTimeout(retryExports30, 5000);
+}
+setTimeout(retryExports30, 5000);
 send({ ev: 'v29_armed' });
+
+// ---- v30b: WARN call site + commit-mid + main-driver heartbeat (evening26) ----
+let rowappCnt30 = 0;
+safeAttach('rowapp30', '0x14140ea70', {
+  onEnter(args) { rowappCnt30++; let tid = -1; try { tid = this.threadId; } catch (e) {} if (rowappCnt30 <= 100) send({ ev: 'rowapp30', n: rowappCnt30, ra: this.returnAddress.toString(), tid: tid }); else if (rowappCnt30 % 100 === 0) send({ ev: 'rowapp30_cnt', n: rowappCnt30 }); }
+});
+let commitmidCnt30 = 0;
+safeAttach('commitmid30', '0x14167b840', {
+  onEnter(args) { commitmidCnt30++; let tid = -1; try { tid = this.threadId; } catch (e) {} send({ ev: 'commitmid30', n: commitmidCnt30, tid: tid }); }
+});
+let maindrvCnt30 = 0;
+safeAttach('maindrv30', '0x141007860', {
+  onEnter(args) { maindrvCnt30++; if (maindrvCnt30 % 50 === 0) send({ ev: 'maindrv30_cnt', n: maindrvCnt30 }); }
+});
+send({ ev: 'v30b_armed' });
