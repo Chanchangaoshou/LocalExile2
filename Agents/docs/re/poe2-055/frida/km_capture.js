@@ -790,3 +790,35 @@ safeAttach('setter23', '0x14211f920', {
   onEnter(args) { send({ ev: 'setter23', a0: args[0].toString(), a1: args[1].toString(), st: rU32_23(args[0], 0x2270) }); }
 });
 send({ ev: 'v23_armed' });
+
+// ---- v24: catch the +0x272a flip red-handed (evening21) ----
+function rU16_24(p, off) { try { return p.add(off).readU16(); } catch (e) { return -1; } }
+let case29Cnt24 = 0;
+safeAttach('case29', '0x142122346', {
+  onEnter(args) { case29Cnt24++; send({ ev: 'case29', n: case29Cnt24 }); }
+});
+let idispIdCnt24 = 0;
+safeAttach('idisp_id', '0x1421220f0', {
+  onEnter(args) { idispIdCnt24++; let id = -1; try { id = this.context.r13.add(8).readU16(); } catch (e) {} send({ ev: 'idisp_id', n: idispIdCnt24, id: id }); }
+});
+let frameCnt24 = 0;
+safeAttach('frame24', '0x1410087e0', {
+  onEnter(args) { frameCnt24++; if (frameCnt24 % 600 === 0) send({ ev: 'frame_hb', n: frameCnt24 }); }
+});
+let twrapCnt24 = 0;
+safeAttach('twrap24', '0x142120650', {
+  onEnter(args) { twrapCnt24++; if (twrapCnt24 % 600 === 0) send({ ev: 'twrap_hb', n: twrapCnt24 }); }
+});
+let spinCnt24 = 0;
+safeAttach('spin24', '0x14211ed50', {
+  onEnter(args) { spinCnt24++; if (spinCnt24 <= 3 || spinCnt24 % 1000 === 0) send({ ev: 'spin24', n: spinCnt24 }); }
+});
+let clrCnt24 = 0;
+safeAttach('clrflag24', '0x14212cb20', {
+  onEnter(args) { clrCnt24++; send({ ev: 'clrflag24', n: clrCnt24 }); }
+});
+let rearmCnt24 = 0;
+safeAttach('rearm24', '0x142120176', {
+  onEnter(args) { rearmCnt24++; if (rearmCnt24 <= 3 || rearmCnt24 % 100 === 0) send({ ev: 'rearm24', n: rearmCnt24 }); }
+});
+send({ ev: 'v24_armed' });
