@@ -742,9 +742,9 @@ function gU16v22(p, off) { try { return p.add(off).readU16().toString(); } catch
 safeAttach('idispatch', '0x1421220f0', {
   onEnter(args) { send({ ev: 'idispatch', a0: args[0].toString(), a1: args[1].toString(), id0: gU16v22(args[1], 0), id8: gU16v22(args[1], 8), ra: this.returnAddress.toString() }); }
 });
+let case1eCnt26 = 0;
 safeAttach('case1e', '0x14212269f', {
-  onEnter(args) { send({ ev: 'case1e', a0: args[0].toString(), a1: args[1].toString(), ra: this.returnAddress.toString() }); },
-  onLeave(ret) { send({ ev: 'case1e_out', ret: ret.toString() }); }
+  onEnter(args) { case1eCnt26++; send({ ev: 'case1e', n: case1eCnt26 }); }
 });
 safeAttach('wctor', '0x14212ece0', {
   onEnter(args) { send({ ev: 'wctor', a0: args[0].toString(), a1: args[1].toString(), ra: this.returnAddress.toString() }); }
@@ -773,8 +773,9 @@ safeAttach('tick23', '0x142120cf0', {
 safeAttach('timeout23', '0x142120ffb', {
   onEnter(args) { send({ ev: 'timeout23', a0: args[0].toString(), st: rU32_23(args[0], 0x2270), dl: rU64_23(args[0], 0x21a0) }); }
 });
+let pumpsecCnt26 = 0;
 safeAttach('pumpsec23', '0x142121104', {
-  onEnter(args) { send({ ev: 'pumpsec23', a0: args[0].toString(), a1: args[1].toString(), st: rU32_23(args[0], 0x2270) }); }
+  onEnter(args) { pumpsecCnt26++; send({ ev: 'pumpsec23', n: pumpsecCnt26 }); }
 });
 let fillCnt23 = 0;
 safeAttach('fill23', '0x142197bf0', {
@@ -797,17 +798,13 @@ let case29Cnt24 = 0;
 safeAttach('case29', '0x142122346', {
   onEnter(args) { case29Cnt24++; send({ ev: 'case29', n: case29Cnt24 }); }
 });
-let idispIdCnt24 = 0;
-safeAttach('idisp_id', '0x1421220f0', {
-  onEnter(args) { idispIdCnt24++; let id = -1; try { id = this.context.r13.add(8).readU16(); } catch (e) {} send({ ev: 'idisp_id', n: idispIdCnt24, id: id }); }
-});
 let frameCnt24 = 0;
 safeAttach('frame24', '0x1410087e0', {
-  onEnter(args) { frameCnt24++; if (frameCnt24 % 600 === 0) send({ ev: 'frame_hb', n: frameCnt24 }); }
+  onEnter(args) { frameCnt24++; if (frameCnt24 % 50 === 0) send({ ev: 'frame_hb', n: frameCnt24 }); }
 });
 let twrapCnt24 = 0;
 safeAttach('twrap24', '0x142120650', {
-  onEnter(args) { twrapCnt24++; if (twrapCnt24 % 600 === 0) send({ ev: 'twrap_hb', n: twrapCnt24 }); }
+  onEnter(args) { twrapCnt24++; if (twrapCnt24 % 50 === 0) send({ ev: 'twrap_hb', n: twrapCnt24 }); }
 });
 let spinCnt24 = 0;
 safeAttach('spin24', '0x14211ed50', {
@@ -827,9 +824,9 @@ send({ ev: 'v24_armed' });
 function rU16_25(p, off) { try { return p.add(off).readU16(); } catch (e) { return -1; } }
 function rU8_25(p, off) { try { return p.add(off).readU8(); } catch (e) { return -1; } }
 function rPtr_25(p, off) { try { return p.add(off).readPointer().toString(); } catch (e) { return 'ERR'; } }
-let sendCnt25 = 0;
-safeAttach('send25', '0x14211fa00', {
-  onEnter(args) { sendCnt25++; let id = rU16_25(args[2], 8); if (id === 0x9a || sendCnt25 <= 10) send({ ev: 'send25', n: sendCnt25, id: id }); else if (sendCnt25 % 500 === 0) send({ ev: 'send25_cnt', n: sendCnt25 }); }
+let sendCnt26 = 0;
+safeAttach('send26', '0x14211fa00', {
+  onEnter(args) { sendCnt26++; let id = rU16_25(args[1], 8); let vt = ''; try { vt = args[1].readPointer().toString(); } catch (e) {} if (id === 0x9a || sendCnt26 <= 10) send({ ev: 'send26', n: sendCnt26, id: id, vt: vt, ra: this.returnAddress.toString() }); else if (sendCnt26 % 500 === 0) send({ ev: 'send26_cnt', n: sendCnt26 }); }
 });
 let mk9aCnt25 = 0;
 safeAttach('mk9a25', '0x142120dc0', {
@@ -837,25 +834,44 @@ safeAttach('mk9a25', '0x142120dc0', {
 });
 let fdrvCnt25 = 0;
 safeAttach('fdrv25', '0x141007d20', {
-  onEnter(args) { fdrvCnt25++; if (fdrvCnt25 % 600 === 0) send({ ev: 'fdrv_hb', n: fdrvCnt25 }); }
+  onEnter(args) { fdrvCnt25++; if (fdrvCnt25 % 50 === 0) send({ ev: 'fdrv_hb', n: fdrvCnt25 }); }
 });
-let regA25 = '', regACnt25 = 0;
-safeAttach('regA25', '0x1404fe7a0', {
-  onLeave(ret) { regACnt25++; let v = ret.toString(); let s = v + '/' + (ret.isNull() ? 'null' : rPtr_25(ret, 0x1a8)); if (s !== regA25 || regACnt25 % 30 === 0) { regA25 = s; send({ ev: 'regA25', n: regACnt25, v: s }); } }
+let regA26 = '', regA26s = '', regACnt26 = 0;
+safeAttach('regA26', '0x1404fe7a0', {
+  onLeave(ret) { regACnt26++; let v = ret.toString(); let s = ret.isNull() ? 'null' : rPtr_25(ret, 0x1a8); if (v !== regA26 || s !== regA26s || regACnt26 % 30 === 0) { regA26 = v; regA26s = s; send({ ev: 'regA26', n: regACnt26, ret: v, sess: s }); } }
 });
-let regB25 = '', regBCnt25 = 0;
-safeAttach('regB25', '0x14010cda0', {
-  onLeave(ret) { regBCnt25++; let v = ret.toString(); let s = v + '/' + (ret.isNull() ? 'null' : rPtr_25(ret, 0x1a8)); if (s !== regB25 || regBCnt25 % 30 === 0) { regB25 = s; send({ ev: 'regB25', n: regBCnt25, v: s }); } }
-});
-safeAttach('conn25', '0x14211eb9c', {
-  onEnter(args) { send({ ev: 'conn25', f272a: rU8_25(args[0], 0x272a), f272b: rU8_25(args[0], 0x272b), st: rU8_25(args[0], 0x2270) }); }
+let regB26 = '', regB26s = '', regBCnt26 = 0;
+safeAttach('regB26', '0x14010cda0', {
+  onLeave(ret) { regBCnt26++; let v = ret.toString(); let s = ret.isNull() ? 'null' : rPtr_25(ret, 0x1a8); if (v !== regB26 || s !== regB26s || regBCnt26 % 30 === 0) { regB26 = v; regB26s = s; send({ ev: 'regB26', n: regBCnt26, ret: v, sess: s }); } }
 });
 let pd1Cnt25 = 0;
 safeAttach('pdrv125', '0x1420e6d40', {
-  onEnter(args) { pd1Cnt25++; if (pd1Cnt25 % 600 === 0) send({ ev: 'pdrv1_hb', n: pd1Cnt25 }); }
+  onEnter(args) { pd1Cnt25++; if (pd1Cnt25 % 50 === 0) send({ ev: 'pdrv1_hb', n: pd1Cnt25 }); }
 });
 let pd2Cnt25 = 0;
 safeAttach('pdrv225', '0x14272fca0', {
-  onEnter(args) { pd2Cnt25++; if (pd2Cnt25 % 600 === 0) send({ ev: 'pdrv2_hb', n: pd2Cnt25 }); }
+  onEnter(args) { pd2Cnt25++; if (pd2Cnt25 % 50 === 0) send({ ev: 'pdrv2_hb', n: pd2Cnt25 }); }
 });
 send({ ev: 'v25_armed' });
+
+// ---- v26: 0x9a true sender + flag/session identity (evening23) ----
+let cloneCnt26 = 0;
+safeAttach('clone26', '0x141f38c00', {
+  onEnter(args) { cloneCnt26++; let sid = rU16_25(args[0], 8); if (sid === 0x9a || cloneCnt26 <= 10) send({ ev: 'clone26', n: cloneCnt26, srcId: sid, ra: this.returnAddress.toString() }); else if (cloneCnt26 % 500 === 0) send({ ev: 'clone26_cnt', n: cloneCnt26 }); }
+});
+safeAttach('clrflag26', '0x14212cb20', {
+  onEnter(args) { let g = args[0]; let sess = ''; try { sess = g.add(8).readPointer().toString(); } catch (e) {} this.g26 = g.toString(); this.s26 = sess; let fb = -1; try { fb = g.add(8).readPointer().add(0x272a).readU8(); } catch (e) {} this.fb26 = fb; send({ ev: 'clrflag26', grp: this.g26, sess: sess, before: fb }); },
+  onLeave(ret) { let fa = -1; try { fa = this.s26 === '' ? -1 : ptr(this.s26).add(0x272a).readU8(); } catch (e) {} send({ ev: 'clrflag26_out', sess: this.s26, after: fa }); }
+});
+let tick26Cnt = 0; let tick26Last = '';
+safeAttach('tick26s', '0x142120cf0', {
+  onEnter(args) { tick26Cnt++; let s = args[0].toString(); let sig = s + '/' + rU8_25(args[0], 0x272a) + '/' + rU32_23(args[0], 0x2270); if (sig !== tick26Last || tick26Cnt % 30 === 0) { tick26Last = sig; send({ ev: 'tick26s', n: tick26Cnt, sig: sig }); } }
+});
+safeAttach('conn26', '0x14211eb45', {
+  onEnter(args) { let rsi = this.context.rsi; send({ ev: 'conn26', f272a: rU8_25(rsi, 0x272a), f272b: rU8_25(rsi, 0x272b), st: rU32_23(rsi, 0x2270) }); }
+});
+let idisp26Cnt = 0;
+safeAttach('idisp26', '0x14212217d', {
+  onEnter(args) { idisp26Cnt++; let id = -1; try { id = this.context.r13.add(8).readU16(); } catch (e) {} send({ ev: 'idisp26', n: idisp26Cnt, id: id }); }
+});
+send({ ev: 'v26_armed' });
