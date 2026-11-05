@@ -736,3 +736,23 @@ safeAttach('commitwrap', '0x140b99180', {
   onEnter(args) { send({ ev: 'commitwrap', t: Date.now(), a0: args[0].toString(), ra: this.returnAddress.toString() }); }
 });
 send({ ev: 'v21_armed' });
+
+// ---- v22: instance pump + world/aggregate ctors (evening19) ----
+function gU16v22(p, off) { try { return p.add(off).readU16().toString(); } catch (e) { return 'ERR'; } }
+safeAttach('idispatch', '0x1421220f0', {
+  onEnter(args) { send({ ev: 'idispatch', a0: args[0].toString(), a1: args[1].toString(), id0: gU16v22(args[1], 0), id8: gU16v22(args[1], 8), ra: this.returnAddress.toString() }); }
+});
+safeAttach('case1e', '0x14212269f', {
+  onEnter(args) { send({ ev: 'case1e', a0: args[0].toString(), a1: args[1].toString(), ra: this.returnAddress.toString() }); },
+  onLeave(ret) { send({ ev: 'case1e_out', ret: ret.toString() }); }
+});
+safeAttach('wctor', '0x14212ece0', {
+  onEnter(args) { send({ ev: 'wctor', a0: args[0].toString(), a1: args[1].toString(), ra: this.returnAddress.toString() }); }
+});
+safeAttach('aggctor', '0x14167d470', {
+  onEnter(args) { send({ ev: 'aggctor', a0: args[0].toString(), a1: args[1].toString(), ra: this.returnAddress.toString() }); }
+});
+safeAttach('ifactory', '0x142170500', {
+  onEnter(args) { send({ ev: 'ifactory', a0: args[0].toString(), a1: args[1].toString(), ra: this.returnAddress.toString() }); }
+});
+send({ ev: 'v22_armed' });
