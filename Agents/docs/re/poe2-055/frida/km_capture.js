@@ -822,3 +822,40 @@ safeAttach('rearm24', '0x142120176', {
   onEnter(args) { rearmCnt24++; if (rearmCnt24 <= 3 || rearmCnt24 % 100 === 0) send({ ev: 'rearm24', n: rearmCnt24 }); }
 });
 send({ ev: 'v24_armed' });
+
+// ---- v25: 0x9a sender + registration race (evening22) ----
+function rU16_25(p, off) { try { return p.add(off).readU16(); } catch (e) { return -1; } }
+function rU8_25(p, off) { try { return p.add(off).readU8(); } catch (e) { return -1; } }
+function rPtr_25(p, off) { try { return p.add(off).readPointer().toString(); } catch (e) { return 'ERR'; } }
+let sendCnt25 = 0;
+safeAttach('send25', '0x14211fa00', {
+  onEnter(args) { sendCnt25++; let id = rU16_25(args[2], 8); if (id === 0x9a || sendCnt25 <= 10) send({ ev: 'send25', n: sendCnt25, id: id }); else if (sendCnt25 % 500 === 0) send({ ev: 'send25_cnt', n: sendCnt25 }); }
+});
+let mk9aCnt25 = 0;
+safeAttach('mk9a25', '0x142120dc0', {
+  onEnter(args) { mk9aCnt25++; send({ ev: 'mk9a25', n: mk9aCnt25 }); }
+});
+let fdrvCnt25 = 0;
+safeAttach('fdrv25', '0x141007d20', {
+  onEnter(args) { fdrvCnt25++; if (fdrvCnt25 % 600 === 0) send({ ev: 'fdrv_hb', n: fdrvCnt25 }); }
+});
+let regA25 = '', regACnt25 = 0;
+safeAttach('regA25', '0x1404fe7a0', {
+  onLeave(ret) { regACnt25++; let v = ret.toString(); let s = v + '/' + (ret.isNull() ? 'null' : rPtr_25(ret, 0x1a8)); if (s !== regA25 || regACnt25 % 30 === 0) { regA25 = s; send({ ev: 'regA25', n: regACnt25, v: s }); } }
+});
+let regB25 = '', regBCnt25 = 0;
+safeAttach('regB25', '0x14010cda0', {
+  onLeave(ret) { regBCnt25++; let v = ret.toString(); let s = v + '/' + (ret.isNull() ? 'null' : rPtr_25(ret, 0x1a8)); if (s !== regB25 || regBCnt25 % 30 === 0) { regB25 = s; send({ ev: 'regB25', n: regBCnt25, v: s }); } }
+});
+safeAttach('conn25', '0x14211eb9c', {
+  onEnter(args) { send({ ev: 'conn25', f272a: rU8_25(args[0], 0x272a), f272b: rU8_25(args[0], 0x272b), st: rU8_25(args[0], 0x2270) }); }
+});
+let pd1Cnt25 = 0;
+safeAttach('pdrv125', '0x1420e6d40', {
+  onEnter(args) { pd1Cnt25++; if (pd1Cnt25 % 600 === 0) send({ ev: 'pdrv1_hb', n: pd1Cnt25 }); }
+});
+let pd2Cnt25 = 0;
+safeAttach('pdrv225', '0x14272fca0', {
+  onEnter(args) { pd2Cnt25++; if (pd2Cnt25 % 600 === 0) send({ ev: 'pdrv2_hb', n: pd2Cnt25 }); }
+});
+send({ ev: 'v25_armed' });
