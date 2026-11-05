@@ -756,3 +756,37 @@ safeAttach('ifactory', '0x142170500', {
   onEnter(args) { send({ ev: 'ifactory', a0: args[0].toString(), a1: args[1].toString(), ra: this.returnAddress.toString() }); }
 });
 send({ ev: 'v22_armed' });
+
+// ---- v23: tick / pump stall gates (evening20) ----
+function rU8_23(p, off) { try { return p.add(off).readU8(); } catch (e) { return -1; } }
+function rU32_23(p, off) { try { return p.add(off).readU32(); } catch (e) { return -1; } }
+function rU64_23(p, off) { try { return p.add(off).readU64().toString(); } catch (e) { return 'ERR'; } }
+let tickCnt23 = 0; let tickLast23 = '';
+safeAttach('tick23', '0x142120cf0', {
+  onEnter(args) {
+    tickCnt23++;
+    let s = args[0];
+    let sig = rU8_23(s, 0x272a) + '/' + rU32_23(s, 0x2270) + '/' + rU64_23(s, 0x21a0) + '/' + rU64_23(s, 0x2198);
+    if (sig !== tickLast23 || tickCnt23 % 30 === 0) { tickLast23 = sig; send({ ev: 'tick23', n: tickCnt23, sig: sig }); }
+  }
+});
+safeAttach('timeout23', '0x142120ffb', {
+  onEnter(args) { send({ ev: 'timeout23', a0: args[0].toString(), st: rU32_23(args[0], 0x2270), dl: rU64_23(args[0], 0x21a0) }); }
+});
+safeAttach('pumpsec23', '0x142121104', {
+  onEnter(args) { send({ ev: 'pumpsec23', a0: args[0].toString(), a1: args[1].toString(), st: rU32_23(args[0], 0x2270) }); }
+});
+let fillCnt23 = 0;
+safeAttach('fill23', '0x142197bf0', {
+  onEnter(args) { fillCnt23++; this.s23 = (fillCnt23 % 10 === 0); if (this.s23) send({ ev: 'fill23', n: fillCnt23, f251: rU8_23(args[0], 0x251) }); },
+  onLeave(ret) { if (this.s23) send({ ev: 'fill23_out', ret: ret.toString() }); }
+});
+let pump0Cnt23 = 0;
+safeAttach('pump023', '0x1421c5b90', {
+  onEnter(args) { pump0Cnt23++; this.f23 = rU8_23(args[0], 0x252); this.f23b = rU8_23(args[1], 0x252); if (pump0Cnt23 % 500 === 0) send({ ev: 'pump0_cnt', n: pump0Cnt23 }); },
+  onLeave(ret) { let r = ret.toInt32(); if (r !== 0 || this.f23 === 1 || this.f23b === 1) send({ ev: 'pump023_out', n: pump0Cnt23, ret: r, f252a: this.f23, f252b: this.f23b }); }
+});
+safeAttach('setter23', '0x14211f920', {
+  onEnter(args) { send({ ev: 'setter23', a0: args[0].toString(), a1: args[1].toString(), st: rU32_23(args[0], 0x2270) }); }
+});
+send({ ev: 'v23_armed' });
