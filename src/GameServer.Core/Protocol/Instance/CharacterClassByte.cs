@@ -1,14 +1,14 @@
 namespace GameServer.Core.Protocol.Instance;
 
 /// <summary>
-/// The 3.29.3b Player/0x33 class byte. The base class is Characters.IntegerId; ClassNo is Ascendancy.ClassNo,
+/// The 0.5.5 class byte. The base class is Characters.IntegerId (0.5.5 has twelve classes, 0..11); ClassNo is Ascendancy.ClassNo,
 /// zero when unascended. This is not a contiguous three-bit shift: native 0x142156f24 decodes bit 5 as bit 2.
 /// </summary>
 public static class CharacterClassByte
 {
     public static byte Encode(byte baseClass, byte ascendancyClassNo = 0)
     {
-        if (baseClass > 6) throw new ArgumentOutOfRangeException(nameof(baseClass));
+        if (baseClass > 11) throw new ArgumentOutOfRangeException(nameof(baseClass));
         if (ascendancyClassNo > 7) throw new ArgumentOutOfRangeException(nameof(ascendancyClassNo));
         return (byte)(baseClass | ((ascendancyClassNo & 3) << 6) | ((ascendancyClassNo & 4) << 3));
     }
