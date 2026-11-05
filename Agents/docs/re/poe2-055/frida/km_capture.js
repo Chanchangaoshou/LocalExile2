@@ -408,7 +408,8 @@ Interceptor.attach(at('0x141e72a00'), {
   onEnter(args) {
     let id = null, f8d = null;
     try { const ent = this.context.rdx; id = ent.add(0x88).readU32(); f8d = ent.add(0x8d).readU8(); } catch (e) {}
-    send({ ev: 'world_register', id, f8d });
+    let tid = -1; try { tid = this.threadId; } catch (e) {}
+    send({ ev: 'world_register', id, f8d, tid });
   }
 });
 Interceptor.attach(at('0x141da37e0'), { onEnter(args) { send({ ev: 'ao_attach' }); } });
@@ -879,15 +880,15 @@ send({ ev: 'v26_armed' });
 // ---- v27: clear-chain death + 0x9a raw write + pump ownership (evening24) ----
 let flipSess27 = null;
 safeAttach('ae90_27', '0x14212ae90', {
-  onEnter(args) { send({ ev: 'ae90_27', ra: this.returnAddress.toString() }); },
+  onEnter(args) { let tid = -1; try { tid = this.threadId; } catch (e) {} send({ ev: 'ae90_27', ra: this.returnAddress.toString(), tid: tid }); },
   onLeave(ret) { send({ ev: 'ae90_27_out' }); }
 });
 safeAttach('reset27', '0x14211fdb0', {
-  onEnter(args) { send({ ev: 'reset27', ra: this.returnAddress.toString() }); },
+  onEnter(args) { let tid = -1; try { tid = this.threadId; } catch (e) {} send({ ev: 'reset27', ra: this.returnAddress.toString(), tid: tid }); },
   onLeave(ret) { send({ ev: 'reset27_out' }); }
 });
 safeAttach('commit27', '0x14167b3f0', {
-  onEnter(args) { let f = -1; try { if (flipSess27 !== null) f = flipSess27.add(0x272a).readU8(); } catch (e) {} send({ ev: 'commit27', flag: f }); },
+  onEnter(args) { let f = -1; try { if (flipSess27 !== null) f = flipSess27.add(0x272a).readU8(); } catch (e) {} let tid = -1; try { tid = this.threadId; } catch (e) {} send({ ev: 'commit27', flag: f, tid: tid }); },
   onLeave(ret) { let f = -1; try { if (flipSess27 !== null) f = flipSess27.add(0x272a).readU8(); } catch (e) {} send({ ev: 'commit27_out', flag: f }); }
 });
 let throwCnt27 = 0;
@@ -919,15 +920,75 @@ let pdrv2Cnt27 = 0;
 safeAttach('pdrv2_27', '0x14272fca0', {
   onEnter(args) { pdrv2Cnt27++; if (pdrv2Cnt27 % 50 === 0) send({ ev: 'pdrv2_27_cnt', n: pdrv2Cnt27 }); }
 });
-let getA27 = '', getACnt27 = 0;
-safeAttach('getA27', '0x14010cea0', {
-  onLeave(ret) { getACnt27++; let v = ret.toString(); if (v !== getA27 || getACnt27 % 30 === 0) { getA27 = v; send({ ev: 'getA27', n: getACnt27, ret: v }); } }
-});
-let getB27 = '', getBCnt27 = 0;
-safeAttach('getB27', '0x141003f00', {
-  onLeave(ret) { getBCnt27++; let v = ret.toString(); if (v !== getB27 || getBCnt27 % 30 === 0) { getB27 = v; send({ ev: 'getB27', n: getBCnt27, ret: v }); } }
-});
+
+
 safeAttach('rearm1e27', '0x142122c5c', {
   onEnter(args) { let al = -1; try { al = this.context.rax.and(0xff).toInt32(); } catch (e) {} let old = -1; try { old = this.context.r15.add(0x272b).readU8(); } catch (e) {} send({ ev: 'rearm1e27', al: al, old272b: old }); }
 });
 send({ ev: 'v27_armed' });
+
+// ---- v28: tid attribution + fixed 0x9a append filter + flip-window tail (evening25 prep) ----
+let getA28 = '', getB28 = '';
+safeAttach('getA28', '0x14010cea0', {
+  onLeave(ret) { let v = ret.toString(); if (v !== getA28) { getA28 = v; send({ ev: 'getA28', ret: v }); } }
+});
+safeAttach('getB28', '0x141003f00', {
+  onLeave(ret) { let v = ret.toString(); if (v !== getB28) { getB28 = v; send({ ev: 'getB28', ret: v }); } }
+});
+let app9aCnt28 = 0;
+safeAttach('app9a28', '0x142197fb0', {
+  onEnter(args) { let len = -1; try { len = args[2].toInt32(); } catch (e) {} let b0 = -1; try { b0 = args[1].readU16(); } catch (e) {} if (len === 2 && b0 === 0x9a00) { app9aCnt28++; send({ ev: 'app9a28', n: app9aCnt28, stream: args[0].toString(), ra: this.returnAddress.toString() }); } }
+});
+let flushCnt28 = 0;
+safeAttach('flush28', '0x142198110', {
+  onEnter(args) { flushCnt28++; if (flushCnt28 <= 100) send({ ev: 'flush28', n: flushCnt28, stream: args[0].toString() }); else if (flushCnt28 % 200 === 0) send({ ev: 'flush28_cnt', n: flushCnt28 }); }
+});
+safeAttach('case1e_tail28', '0x142122c63', {
+  onEnter(args) { let f = -1; try { f = this.context.r15.add(0x272a).readU8(); } catch (e) {} send({ ev: 'case1e_tail28', flag: f, r15: this.context.r15.toString() }); }
+});
+send({ ev: 'v28_armed' });
+
+// ---- v29: commit death point + unwind + socket-write discrimination (evening25) ----
+let seq29 = 0;
+function inOut29(tag, va) {
+  safeAttach(tag, va, {
+    onEnter(args) { seq29++; let tid = -1; try { tid = this.threadId; } catch (e) {} send({ ev: tag, seq: seq29, tid: tid }); },
+    onLeave(ret) { let tid = -1; try { tid = this.threadId; } catch (e) {} send({ ev: tag + '_out', tid: tid }); }
+  });
+}
+inOut29('visit29', '0x14169c8a0');
+inOut29('ensure29', '0x141681720');
+inOut29('reglookup29', '0x141693840');
+try {
+  const unw = Module.getExportByName('ntdll.dll', 'RtlUnwindEx');
+  Interceptor.attach(unw, { onEnter(args) { let tid = -1; try { tid = this.threadId; } catch (e) {} send({ ev: 'unwind29', tid: tid, ra: this.returnAddress.toString() }); } });
+} catch (e) { send({ ev: 'unwind29_nohook', err: String(e).substring(0, 80) }); }
+let tickStream29 = '';
+safeAttach('tickstream29', '0x142120cf0', {
+  onEnter(args) { let st = ''; try { st = args[0].add(0x20f8).readPointer().toString(); } catch (e) {} if (st !== tickStream29) { tickStream29 = st; send({ ev: 'tickstream29', stream: st }); } }
+});
+let wsacnt29 = 0;
+function logSmallSend(tag, total, firstBuf, ra, tid) {
+  wsacnt29++;
+  if (total <= 128) {
+    let hex = ''; try { let ba = firstBuf.readByteArray(Math.min(16, total)); hex = ba ? Array.from(new Uint8Array(ba)).map(b => ('0' + b.toString(16)).slice(-2)).join('') : ''; } catch (e) {}
+    send({ ev: tag, n: wsacnt29, total: total, hex: hex, ra: ra, tid: tid });
+  } else if (wsacnt29 % 1000 === 0) send({ ev: 'wsasend29_cnt', n: wsacnt29 });
+}
+try {
+  const ws = Module.getExportByName('ws2_32.dll', 'WSASend');
+  Interceptor.attach(ws, { onEnter(args) {
+    try {
+      let cnt = args[2].toInt32(); let total = 0; let first = null;
+      for (let i = 0; i < Math.min(cnt, 8); i++) { let b = args[1].add(i * 16); let l = b.readU32(); total += l; if (i === 0) first = b.add(8).readPointer(); }
+      let tid = -1; try { tid = this.threadId; } catch (e) {} logSmallSend('wsasend29', total, first, this.returnAddress.toString(), tid);
+    } catch (e) {}
+  } });
+} catch (e) { send({ ev: 'wsasend29_nohook', err: String(e).substring(0, 80) }); }
+try {
+  const snd = Module.getExportByName('ws2_32.dll', 'send');
+  Interceptor.attach(snd, { onEnter(args) {
+    try { let l = args[2].toInt32(); let tid = -1; try { tid = this.threadId; } catch (e) {} logSmallSend('send29', l, args[1], this.returnAddress.toString(), tid); } catch (e) {}
+  } });
+} catch (e) { send({ ev: 'send29_nohook', err: String(e).substring(0, 80) }); }
+send({ ev: 'v29_armed' });

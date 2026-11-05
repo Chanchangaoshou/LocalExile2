@@ -4192,3 +4192,190 @@ case29、setter23、timeout23、spin24、rearm24、throw_probe、v14–v20
    → 4. 翻转采样 brackets + 线程 id（定翻转区间与线程）
    → 5. rearm1e27（补重臂语义）。
    任一步出确定性结论即停，不必等全量；网关动作仍需等 v27 会话判别。
+
+## 2026-11-05 evening25 — three functions never return
+
+任务来源：v27 会话（2026-11-05 11:42，pid 49588，镜像基址 0x7ff669990000，
+摘录 /tmp/q27b.out）的关键矛盾 + 三个探针失误的纠正。结论分级标注。
+
+### 25.0 先纠正：任务简报里的三个返回地址换算错了 0xF0000（已实证）
+
+原始 runtime 地址（trace 原文）+ 基址 0x7ff669990000 的正确换算（Python 复核，
+VA = runtime − base + 0x140000000）：
+
+- clear ra 0x7ff66a9ac08f → **0x14101C08F**（与简报一致）
+- ae90 ra 0x7ff66babcb8f → **0x14212CB8F**（简报写 0x14121CB8F，低了 0xF0000）
+- reset ra 0x7ff66babcbd8 → **0x14212CBD8**（简报写 0x14122CBD8，低了 0xF0000）
+- commit ra 0x7ff66baafe35 → **0x14211FE35**（简报写 0x14121FE35，低了 0xF0000）
+
+简报的四个值不可能出自同一基址（clear 要求基址 0x7ff669990000，其余三者
+要求基址 0x7ff66a890000）——换算口径不一致，属简报错误，不是探针错误。
+连带纠正：evening20 对 commit ra 的“中指令地址”担忧作废——在正确 VA
+0x14211FE35 处是 `call r10` 后的 nop，是干净返回点；evening20 当时在错误的
+0x14121FE35 处反汇编，恰好落在另一函数的中部，误判。
+
+### 25.1 清旗真实调用图：evening24 的链全部证实，所谓矛盾不存在
+
+clear 0x14212cb20 逐字节复核（与 evening24 一致）：prologue → call ae90
+（0x14212cb8a，返回点 0x14212cb8f）→ lea/mov → call reset（0x14212cbd3，
+返回点 0x14212cbd8）→ `xchg byte [rax+0x272a], sil`（sil=0）→ ret。
+
+四个 ra 的归属（全部已实证）：
+
+- clear ra 0x14101C08F：`call qword [rax+0x10]`（0x14101c08c）的返回点——
+  clear 经虚表 +0x10 被调用（evening24“0 个直接调用者，只能经虚表/函数指针”
+  证实）；调用方函数在做 refcount 递减（lock dec）+ 调 0x14101b880，形态为
+  facet 析构/清理函数。
+- ae90 ra 0x14212CB8F：恰好是 clear 体内 ae90 调用的返回点——
+  **clear 确实调了 ae90**。
+- reset ra 0x14212CBD8：恰好是 clear 体内 reset 调用的返回点——
+  **clear 确实调了 reset**。
+- commit ra 0x14211FE35：reset 体内 `mov r10, [rax+0x1e0]`（0x14211fde2，
+  rax=[rcx] 即 aggregate 虚表）+ `call r10`（0x14211fe32）的返回点——
+  **reset 确实经 aggregate 虚表 +0x1e0 调了 commit**。
+
+结论：调用链 clear → ae90 → reset → commit（虚表 +0x1e0）全部成立，
+evening24 无错。任务简报的“矛盾”纯系换算错误。
+
+### 25.2 未返回之谜：不是矛盾，是调用链的必然签名
+
+时序（:47）：clear 进入 → ae90 进入 → **ae90 返回** → reset 进入 → commit
+进入 → commit/reset/clear 出事件全 0；tick 随后 n=3（旗 1）→ n=60，
+:48 世界实体登记波，:50 全静默、进程死亡（死因未从本 trace 定性；与各会话
+0x2f7 后约 17–20 秒断开的 recurring 模式一致，不另立说）。
+
+解释：ae90 在 commit 死亡之前已完成并返回，故 ae90_out 存在；commit 死后，
+reset 与 clear 永远等不到返回，故二者出事件缺失——这是“死在链底”的标准
+签名，不是矛盾。简报的前提“清旗必先返回”倒置了调用顺序：clear 只有等
+reset 返回才能返回，reset 只有等 commit 返回才能返回。
+
+死亡机制再收窄（已实证排除链）：
+
+- **排除 C++ 异常经共享助手 0x142c14380**：throw27 在 :47 窗口为 0；且
+  commit（0x14167b3f0 起至少 0xC00 字节内）与 registry 查找 0x141693840
+  体内均无对 0x142c14380 的直接调用（scan_calls：该助手共 10501 个直接
+  调用点，其中 0x14167/0x14168/0x14169 段内无一落在 commit 或 lookup 范围）。
+  故若为异常，必经其他路径。
+- **剩余三类**：(a) SEH 捕获的硬件 fault（空/野指针解引用——commit 内多处
+  [agg+0x98]/facet 指针解引用，某 facet 缺失即 AV；被上层 SEH 捕获后继续
+  执行，与 :48 登记波、tick 继续、进程存活全部吻合）；(b) commit 内自旋/
+  死锁（registry 查找入口先调函数指针 0x14009e1e0——带 0x5c47/0x49d3/
+  0x49cb ID 的同步原语形态；若该锁被等待旗标的线程持有，即死锁；锁持有者
+  未知）；(c) 其他抛错助手（std 异常经 _CxxThrowException 直调，不走
+  0x142c14380；ensure 的分配失败属此类）。
+- 线程归属未定：v27 未记 ae90/reset/commit 的 tid（探针缺口，v28 已补）——
+  :47 的 clear（tid 37228）与 ae90/reset/commit 是否同线程，须 v28/v29 实测。
+  但注意：若 clear 与组装在同一线程，则 clear 的 ae90/reset 调用就是观测到的
+  那两次（ra 已证实），单线程说更简洁；双线程说要求另有一组 ae90/reset
+  调用（ra 应不同），而观测到的 ra 恰好就是 clear 体内的——故**单线程链是
+  更优解释（推断）**，v28 的 tid 将一锤定音。
+
+### 25.3 commit 死亡点候选（按嫌疑排序）
+
+commit 0x14167b3f0 已读范围（头 0xC00+ 字节至 0x14167c400+，尾部未定位——
+未找到 `add rsp,0x4f0` 式 epilogue，函数很长，确切终点待查；已读部分无
+Sleep/Wait/Lock 导入——仅 GetTickCount（导入槽 0x142E89410）与
+QueryPerformanceCounter（导入槽 0x142E89420）两个计时导入；无对
+0x142c14380 的直接调用）。
+
+候选排序：
+
+1. **registry 查找 0x141693840 的逐元素循环（0x14167bb00–0x14167bb3f）**：
+   commit 内唯一“查表”类操作；查找入口先调函数指针 0x14009e1e0（带
+   0x5c47/0x49d3/0x49cb ID 的同步原语形态——疑似锁获取）；循环内逐元素调
+   lookup + refcount juggling（lock dec/inc at +0x3c）。死法：锁等待
+   （死锁）或某元素键缺失后的空解引用（AV → SEH）。**头号嫌疑**。
+2. **ensure 0x141681720（0x14167b8ce）**：evening6 的懒分配 ensure；分配失败
+   → std bad_alloc（不走共享助手）→ 若被上层捕获则吻合；否则进程应死
+   （未死），故次于 (1)。
+3. **尾部 0xb0 步长循环（0x14167c15f 起）**：调 0x1411d2150/0x1411d4950/
+   0x1411d23f0 + 虚表 +0x1b8（0x14167c2a8）；callee 身份未全定，属开放候选。
+4. **已排除/降级**：visitor 段（0x14167b7d1–0x14167b8cb）：所建 functor 的虚表
+   0x1433ADD30 的 +0x20 槽 = ret 0 存根、+0x130 槽 = xor al,al;ret（返 false）
+   ——可达方法皆为空操作，死于此段的可能性低（但 call rdi 与
+   [rax+0x20]/[rax+0x130] 的 rax 身份未全程追踪，留一分余地）。
+
+### 25.4 0x9a 冲刷问题：append 的冲刷是“装不下才冲”，0x9a 走的是无冲刷路径
+
+append 0x142197fb0 全读：缓冲 [stream+0x280]、游标 [stream+0x258]；仅当新
+数据装不下时才调 flush（0x142198043，r8b=1），仍装不下则调 0x142198820，
+仍失败且 [stream+0x253]==0 时再调 flush（0x14219807d，edx=0xa）；超 2MB
+走另路（0x1421980c4）。**11 字节的 0x9a 追加到空缓冲永远不触发 append 内
+冲刷**——故 0x9a 的 4 次追加无 flush27 事件是符合设计的，不是探针漏记。
+
+冲刷函数 0x142198110 本体：取 SRW 锁（AcquireSRWLockExclusive，导入槽
+0x142E89308）+ 流虚表 +0x10/+8 调用 + OpenMutexA（导入槽 0x142E89518——
+该导入出现在冲刷体内不合常理，疑为另一分支的导入，待复核；不影响
+flush27 的结论）——直接调用点共 575 处（含 tick 的 0x142120e0f、append 内
+3 处、帧内驱动的尾部调用）。
+
+结论链：0x9a 在 :49.906 到达网关，而 :47 后 flush 0x142198110 零调用
+（flush27 计数仅 6，远低于 100 的全记上限——零是真零）；ser9a27=0
+（0x9a 类 serialize 0x141f38ae0，虚表 0x1434e53d8 的 +0x08 槽，零触发——
+直接 serialize 说已证伪；附注：id 15/14 消息用不同虚表，其 serialize 不走
+此钩子，故 ser9a27=0 与 send26×2 不矛盾）；tick 的 send/flush
+（0x142120dfe/0x142120e0f）在 +0x272b 块内，而 0x1e 尾把 +0x272b 置 0
+（rearm1e27：al=0）→ tick 的冲刷路径关闭。故 **0x9a 的发送既不走
+send/serialize，也不走 flush**——只剩：(i) 直接 socket 写（WSASend/send
+直调，绕过流缓冲与冲刷；HNC 加密须由该路径自行处理或复用流加密函数）；
+(ii) 另一流/另一冲刷实现（第二冲刷函数——静态待查：凡调
+AcquireSRWLockExclusive 且操作流缓冲的函数）；(iii) app9a28（v28 首块过滤）
+若亦为 0，则连 append 都没走，(i) 的权重上升。
+注意：socket 层看到的是 HNC 密文，无法以 00 9A 明文过滤——v29 的 socket
+钩子须以小长度（≤128 字节）+ 时机（:49.9 附近）+ 返回地址判别。
+
+### 25.5 网关判定：维持禁令
+
+清旗链死亡与 0x9a 旁路发送均为客户端内部行为；网关字节在全部会话一致，
+stall 点各异；无可观测信号可预判或修复。禁令维持：不重排 burst、不加盲
+延时、不重发 0x23、不发任何新消息（尤其 0x29）、不在 0x9a 前探 0x23、
+不猜字段修复。下一动作只能是 v29 的一次追踪会话。
+
+### 25.6 v29 钩子清单（只读、防洪水、禁用 .toNumber()、safeAttach；沿用 v28 全部钩子）
+
+1. commit 死亡定位三件套（均记 tid + 序号；出事件缺失即卡点）：
+   - visit29：0x14169c8a0 出入（visitor 段入口；log all，稀少）。
+   - ensure29：0x141681720 出入（log all，稀少）。
+   - reglookup29：0x141693840 出入 + 序号（逐元素循环——每对出入记 seq；
+     entry 无对应 leave 即死在某次查找内；循环有界，不洪水）。
+   - unwind29：经 Frida Module.getExportByName('ntdll.dll','RtlUnwindEx')
+     入口记 tid + ra（SEH/C++ 展开的直接证据；展开触发 → 25.2(a)；全程无
+     → 自旋/死锁 (b) 或线程被杀）。
+   - worldreg_tid：给现有 world_register 钩子补 tid（:48 波与 :47 链是否同
+     线程，判别“组装继续”与“清线程独死”）。
+2. 0x9a 发送路径三件套：
+   - 保持 app9a28（首块 len==2 且 buf=00 9A）与 flush28（带 stream 参数）——
+     读序先看二者。
+   - wsasend29：经 Module.getExportByName('ws2_32.dll','WSASend') 与
+     ('ws2_32.dll','send') 入口，仅当总长度 ≤128 字节记（tid + ra + 长度 +
+     前 16 字节 hex；密文故不按内容过滤；大流量自动排除）。
+   - （静态跟进，非探针）第二冲刷函数搜查：凡调 AcquireSRWLockExclusive
+     且读写流缓冲（[stream+0x258]/[stream+0x280] 族偏移）的函数列入 v30 候选。
+3. 翻转窗口补点（v28 已有 case1e_tail28；v29 补）：在 0x1e case 尾
+   （0x142122c63 之后）到 clear 入口之间，若有已挂钩事件，采样 [tick 会话
+   +0x272a]——沿用 v27 的 flipSess 机制，记 tid。
+4. 部署门：node --check 必过才传；PC 回读 hash；runner 验活（WMI 脱离会话）；
+   客户端重进才加载；严格时间戳过滤复核。
+
+### 25.7 读序
+
+1. visit29/ensure29/reglookup29 的出入 + unwind29（定 commit 死在
+   visitor/ensure/查找三段中的哪一段、死法是展开还是自旋）→ 2. app9a28/
+   flush28/wsasend29（定 0x9a 是 append+直写、还是另一冲刷、还是连 append
+   都没走）→ 3. worldreg_tid + v28 的 ae90/reset/commit tid（定 :47 链与
+   :48 波的线程关系）→ 4. 翻转采样（补窗口）。任一步出确定性结论即停。
+
+### 25.8 探针失误登记（我方认领）
+
+1. **app9a27 的 len==11 过滤错误（v27）**：0x9a 由 serialize 的 4 次追加
+   （2/1/4/4 字节）建成，不存在一次 len==11 的追加；故 app9a27=0 是探针失误，
+   不是“无直接追加”的证据。已在 v28 改为首块过滤（len==2 且 buf 前 2 字节
+   为 00 9A）。
+2. **getA27/getB27 洪水（v27）**：两 getter 每帧调用，30 次采样仍刷屏；已在
+   v28 改为仅变化记（删洪水版）。
+3. **ae90/reset/commit 初版未记 tid（v27）**：致 :47 窗口的线程归属未定
+   （单线程链 vs 双线程之争本可用 tid 一锤定音）；已在 v28 补 tid。
+4. **（本章新增）任务简报的 VA 换算错误**：ae90/reset/commit 三个返回地址各
+   低了 0xF0000，制造了并不存在的“调用图矛盾”；本章以原始 runtime 地址 +
+   基址重算纠正（见 25.0）。教训：返回地址换算须以原始 runtime 值为准、
+   双人复核，凡“落在指令中部”的返回地址先疑换算、再疑代码。
