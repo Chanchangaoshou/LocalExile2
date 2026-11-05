@@ -3938,3 +3938,257 @@ hash 验活（v21 教训：语法检查未过不得传）。
 
 ### parent 注（部署时核对，2026-11-05 11:2x）
 - **conn25 地址纠正**：本节称 v25 的 conn25 挂在 0x14211eb46（指令中部），与实际部署不符——部署脚本中 conn25 在 **0x14211eb9c**，经反汇编验证为干净指令边界（0x14211eb85 `je 0x14211eb9c` 的跳转目标，首指令 `call 0x140108860`），故“中部挂钩污染 10:01 连接期状态”的警告**不成立、作废**。conn25 读数 -1 的正确解释仅为读错寄存器（rcx 而非 rsi，会话在 rsi；同期反汇编亦证实 deadline 写点用 rsi）。v26 仍以 conn26（0x14211eb45，读 rsi）替换它，取更佳观测点，而非排污。
+
+## 2026-11-05 evening24 — clear never returns
+
+任务来源：v26 会话（2026-11-05 11:23–11:24，摘录 trace-1124-v26.txt）的五个新事实：
+清旗进入未返回、0x9a 三路皆否、tick 会话指针同一、旗 0→1 无会话切换、
+在跑的泵是帧内 0x1420e6d40。本章逐项闭合，结论分级标注。
+
+### 24.1 清旗链全读：无等待原语，“循环等待”不成立
+
+清旗组函数 0x14212cb20（短体）：prologue 保存 group [+0x100]/[+0xf8]/[+0xf0]，
+rdi=[rcx+8]（组会话）；调 0x14212ae90；调复位 0x14211fdb0（rcx=rdi）；
+尾 `xchg byte [rax+0x272a], sil`（rax=[rbp+8]，sil=0）后 epilogue + ret。
+不返回只能发生在两个 callee 内。
+
+0x14212ae90（向量操作）：纯有界工作——向量拷贝 + 连续重复去重 +
+allocator 0x142bbaa10 / transform 0x141fc7380 / memmove 0x142cb75c0 /
+溢出时 throw 辅助 0x1401433c0。**无等待、无锁、无自旋，不可能独自挂起。**
+
+复位 0x14211fdb0（0x14211fdb0–0x1421202d6，ret 在 0x1421202d6）：
+session rcx=r15；经 aggregate vtable +0x1e0 调 commit 0x14167b3f0（唯一直接
+调用者是包装器 0x140b99180 的 0x140b991d1，reset 的调用是虚表调用，
+scan_calls 看不见）；两个 u32 向量循环逐元素调 0x1421202e0（per-element ensure：
+查 [session+0x2400+idx*8]，缺则 0x142150550 构建，追加到 [session+0x23e8]，
+有界）；[agg+0x830/838/840] 三元组处理；[agg+0x98]+0x22e 检查调
+0x14252a680；0x42 排序插入；对象向量虚表 +0x10/+0x78 调用；
+0x1423cbba0、0x141731e60、memmove；尾部 [session+0x23e8] 循环调虚表 +0x58、
+[agg+0xc8/0xd0] 循环调虚表 +0x18；0x142120176 处 `xchg [r15+0x272b], al`
+（重臂 0x9a）；两次 free 0x142bba4e0；ret。**全程有界循环，无等待原语。**
+
+commit 0x14167b3f0（头 0x510 字节 + 尾部抽查）：[agg+0x1b4] 类型检查
+（0x21/0x23/0x20）、旗标字节 +0x663/+0x664、参数存 +0x4b0/+0x4b4、
+0x141d02d20、0x14095efa0；尾部含 **registry 查找 0x141693840**
+（0x14167bb22，miss → 经 0x142c14380 抛错，见 evening17）、
+0x14161f5c0、0x141e763b0、0x1421d7070、0x140b271d0 等。
+**commit 不调用 pump/fill/任何等待原语——“提交需泵”不成立。**
+commit 的输入是 aggregate + 向量，全部在场；它不等待泵。
+
+**判定（已实证链 + 推断）：** “清需提交、提交需泵、泵需清旗”的锁循环
+**不成立**。清链中不存在等待原语，commit 也不依赖泵。清不返回的自洽
+结构只剩两类：
+- **(A) 异常死亡（首选，强推断）**：reset/commit 内某点抛 C++ 异常
+  （头号嫌疑是 commit 内 registry 查找 miss，或某虚表回调抛错），异常沿
+  reset → clear 展开，Frida onLeave 在异常展开时不触发——与“进入 0 次返回”
+  的探针签名精确吻合。清线程死亡后旗永为 1，tick 线程继续跑但永远被门挡
+  住（v26：tick 到 n=30 后死于门，不是死于主线程楔死——evening21 的
+  “主线程楔死于挂起等待”推断需修正：主线程活着循环，死的是清线程）。
+- **(B) 虚表回调内阻塞（备选，未排除）**：reset 尾部的 +0x58/+0x18 虚调用、
+  commit 的 +0x1e8/+0x1b8/+0x10/+0x78 虚调用，其 callee 身份静态未知，
+  其中某个监听回调可能等待。v27 以 throw + 各级 leave 钩子区分 A/B：
+  throw 辅助 0x142c14380 在窗口内触发 → A；各级 leave 均无且 throw 无 → B，
+  且缺失的 leave 直接定位卡住的函数。
+
+附：clear 函数直接调用者 **0 个**（scan_calls 全镜像）：clear 只能经虚表/
+函数指针到达，其调用者身份静态未知——v27 必须记 clrflag 的 returnAddress。
+reset 的唯一直接调用者就是 clear 自身（0x14212cbd3），确认 reset 是 clear
+的私有帮手。
+
+### 24.2 0x9a 原始写路径：发送解剖 + 唯一可行的旁路
+
+发送入口 0x14211fa00 全读（session rcx，message rdx）：
+rdi=[session+0x20f8]（流）；置 [stream+0x240]=1；若 [stream+0x242]≠0 则
+取 [stream+0x248] 锁（import 调用）；调 **消息虚表 +0x08**（rcx=msg，
+rdx=stream）；释锁；[stream+0x240]=0；调时钟 0x140108860，写
+[session+0x2258]=ticks*1000/divisor。
+
+消息虚表 0x1434e53d8（.rdata 直读，已实证）：
++0x00=0x14015c940，**+0x08=0x141f38ae0（serialize）**，+0x10=0x141f38b80，
+**+0x18=0x141f38c00（clone，evening23 的槽位说法证实）**。
+
+serialize 0x141f38ae0 全读（rcx=msg，rdx=stream）：
+id=word [msg+8] 经 import 字节序交换 → **流追加 0x142197fb0(stream, buf, 2)**；
+byte [msg+0x10] → 追加 1 字节；dword [msg+0x18]、[msg+0x1c] 各经交换 →
+各追加 4 字节。合计 2+1+4+4=**11 字节**，与网关 0x9a 长度一致。
+消息结构：+0x00 vtable，+0x08 id(u16)，+0x10 u8，+0x18 tile，+0x1c doodad
+（与 tick 构造器 0x142120dc0 的栈结构逐字段对应：[rsp+0x48]=id，
+[rsp+0x50]=byte，[rsp+0x58]=tile，[rsp+0x5c]=doodad）。
+
+tick 构造器 0x142120dc0 全读：`mov eax,0x9a; mov word [rsp+0x48],ax`；
+vtable 由 rip+0x13c4602 取 = **0x1434e53d8**（即 0x9a 类虚表）；
+tile/doodad 取自 **[agg+0x114]/[agg+0x118]**（区域生成算好存在 aggregate
+里）；调 send 0x14211fa00；随后调 **流冲刷 0x142198110(stream, 0, 0)**。
+结论：发送 = serialize 进流缓冲（不碰 socket）+ flush 推 socket。
+**旁路的关键正在这里：任何绕过 send 的路径只要把 11 字节写进流缓冲
+并触发一次 flush，字节就上网了，而 send26/clone26/mk9a 全程静默。**
+
+其余 5 处 `mov eax,0x9a` 全分类（已实证，均非第二构造器）：
+- 0x1414e6532 / 0x1414e68ee（成对）：0x9a/0x85 作 dword 字段值 + 字节 1，
+  后接对象/字符串操作——是定义记录的枚举值，不是消息 id。
+- 0x141e4f839：返回值 stub（`mov eax,0x9a; ret`，邻位 0x9b/0x97）——
+  返回常量的小函数族，不是发送器。
+- 0x1426982a1：指令中部误解码的假阳性（后续字节为垃圾）。
+- 0x142751275：eax=0x9a 作参数调 0x142740a20，随后同函数又以 0x9b 调用
+  一次——是按 id 查询/注册类操作，不是发送。
+另：`mov word [..],0x9a` 直接写全镜像 **0 处**。故 tick 构造器仍是唯一
+0x9a 构造点（evening23 结论维持），v26 的 0x9a 只能是：
+- **(i) 直接 serialize 调用**：某区域生成完成函数手建 0x9a 消息
+  （vtable 0x1434e53d8，id 0x9a，hash 取 agg+0x114/0x118）后直调
+  0x141f38ae0，跳过 send；或
+- **(ii) 直接流追加**：手组 11 字节调 0x142197fb0（该函数有数百个直接
+  调用者——它是全游戏通用的流追加，静态枚举无用）+ flush 0x142198110；
+- 二者都由 v27 的 serialize/append/flush 钩子在运行时区分（见 24.6）。
+  另注意：v26 会话的 session 建于探针挂载之后，故“挂载前 tick 已建好
+  0x9a 对象、事后发出”的缓存说在本会话**不成立**——发送代码必在挂载后
+  跑过，只是没走 send/clone/tick 构造器三条线。
+
+### 24.3 帧内泵驱动 0x1420e6d40 的归属：它泵的不是实例流
+
+驱动本体（已实证）：rdi=会话样对象；[rdi+0xed8] 子对象旗标/引用处理、
+字符串构建、hash 0x14218eaf0（种子 0x4f3e4ba1）、[rdi+0xee0]=1、
+**[rdi+0xec8] 指针换出（旧者经 0x142197a10 + free 0x142bba570 释放）**、
+调 0x1420e7410、[rcx]=r15+0x2710；尾部：rcx=[rdi+0xec8]，非空则
+调 fill 0x142197bf0，随后 **循环 `call pump0 0x1421c5b90; test al,al;
+jne loop`**；再 [rsi+0x251] 检查、[rdi+0xeb0..0xeb8] 监听向量虚表 +0x08
+调用、[rsi+0x240]/[rsi+0x242] 处理 + 栈消息虚调用 [rax+8]、
+流状态调 0x142198110、import 调用、[rbx+0x250]=0、帧时间 float 累计
+[rdi+0x1080]/[rdi+0x1078]。**它是一个通用的每帧会话更新函数，不受
++0x272a 门控**——这正是它能跑而 tick 泵死的原因：两者根本不是同一泵。
+
+尾部的栈消息解剖（已实证）：vtable 由 rip+0x141f485 取 =
+**0x143506450**；其 +0x08 = **0x141f4b8a0**（另一 serialize：仅读
+[msg+8] 作 id、交换、追加 2 字节）；+0x10 = 0x14010a080（ret 0 存根）。
+栈消息 id 字 = r13w = **1**。故帧内驱动每帧发的是 **2 字节 id 1 消息**，
+不是 0x9a（0x9a 需 11 字节）——帧内驱动不是 0x9a 发送者（排除）。
+
+直接调用者 3 处（scan_calls，已实证）：
+- 0x141007e59：rcx = **0x14010cea0() 的返回值**（getter，非空才调）；
+- 0x141007e71：rcx = **0x141003f00() 的返回值**（另一 getter）；
+- 0x140efcf33：rcx = rsi（上下文对象，非空才调，另带 rbx/xmm9）。
+即驱动是“调用方给什么会话就泵什么”的通用函数。v26 中它约 4950 次
+调用却一次也没分发 0x2f7/0x23（idisp26 仅见 17/30），故其 [rdi+0xec8]
+**不是实例会话的流**（若是，pump0 循环必经 dispatcher 分发，idisp26
+必见 0x2f7/0x23）。实例会话的流只由 tick 路径泵——tick 被门挡住，
+0x2f7/0x23 就永远到不了 dispatcher。两泵不泵同一队列；0x2f7/0x23
+没有经帧内泵入队（入队发生在 tick 泵的 fill 阶段，v23 已证字节已进
+流缓冲、pump0 再未消费）。
+
+归属待 v27 一锤定音：驱动入口记 rcx 与 [rcx+0xec8]，与 tick 会话指针
+（v26 为 0x24630ce7000）及 [session+0x20f8] 比对；getter 0x14010cea0 /
+0x141003f00 的返回值身份（登录会话？UI 会话？）亦在 v27 记一笔。
+后台泵 0x14272fca0（流 +0x60，TLS 检查 + WSAEINTR 重试，v26 <50 次）
+同理记其流参数——它若泵实例流，0x2f7/0x23 也应被分发，实际没有，
+故它也不拥有实例流（待 v27 参数确认）。
+
+### 24.4 翻转写入者再收窄：镜像内直接写已穷尽，翻转不在镜像内
+
+v26 定量：tick 读同一会话指针 0x24630ce7000，旗在该对象上 0→1；
+连接时旗=0（conn26，stale 旗说在本会话不支持）；0x29 零次；
+清旗进入时旗已=1（clrflag26，组会话 = tick 会话，无会话切换）。
+
+本章做的穷尽扫描（.text 全镜像，逐字节，指令形态分类）：
+- disp32=0x272a 的 mov/xchg 存储：仅 **2 处**——0x29 case 的
+  `xchg byte [r15+0x272a], al`（0x142122d44，al=1）和 clear 的
+  `xchg byte [rax+0x272a], sil`（0x14212cbdc，sil=0）。
+- 覆盖 +0x272a 的 dword/qword 存储（disp 0x2723–0x272a）：仅
+  **1 处真写**——会话构造初始化 `mov dword [rsi+0x2728], 0xff00`
+  （0x14211e6f0，字节：+0x2728=0x00，+0x2729=0xff，+0x272a=0x00，
+  +0x272b=0x00——即 evening22/23 的“初值 0xff00”，是清零不是置位）；
+  另一命中 0x1415f3af4 是指令中部误解码（真指令是 `mov edx, 0x2728`
+  作 0x142b2d730 的参数），evening23 的假阳性判定正确。
+- 覆盖 +0x272a 的 16 位存储：**0 处**。
+- lock 前缀 RMW（or/and/xadd/bts/cmpxchg/inc/dec，disp=0x272a）：
+  **0 处**。
+- LEA 取 +0x272a 地址（供后续间接写）：**0 处**。
+- 0x11 case（0x1421221be–0x142122346）无 272a 写；其内虽有
+  `call 0x14211f920`（setter，0x14212228b），但 v26 setter23 零触发——
+  该分支在本会话未走，setter 再次排除。
+- 0x1e case（0x14212269f，尾部已补读至 0x142122cf7 附近）无 272a 写；
+  但尾部有两处值得记：**`xchg [r15+0x272b], al`（0x142122c5c，
+  r12d 未定值）与 `mov [r15+0x218b], 0`（0x142122c63）**——0x1e case
+  自身就动 0x9a 重臂旗（+0x272b）与重臂目标（+0x218b），与 0x29 case
+  的重臂操作同构。r12d 的值（0=解除重臂，1=挂起重臂）待 v27 在该点
+  实测；无论哪值，它都不触 +0x272a，故与翻转无关。
+- commit 头部无 272a/272b/2728 引用（store 扫描本就与函数无关，
+  全镜像覆盖）。
+
+**判定（已实证的排除链）：镜像内不存在第三个直接写点。** 翻转只剩
+两类可能：(a) **跨模块写**（另一 DLL 经导出/回调写该字节）；
+(b) **计算地址/区间写**（memset/memcpy/REP STOS 覆盖含 +0x272a 的
+区间，或运行时算出的指针写——静态不可见）。会话切换说在 v26 已证伪。
+v27 的翻转判别不靠静态：以 tick 会话指针为基准，在窗口内每个已挂钩
+事件（commit 出入、world_register、wfactory、ifactory、pumpsec、pump0、
+clear 入口）采样 [session+0x272a] 并记线程 id——最后一次 0 与第一次 1
+之间的事件区间即翻转区间，线程 id 判定翻转线程（主线程 / 区域生成线
+程 / 其他）。若翻转区间落在某 commit 内部，则深入该 commit 的虚调用。
+
+### 24.5 网关判定：维持禁令，无确定性动作
+
+- 0x2f7+0x23 的发送时机、顺序、字节在全部会话中一致， stall 点却
+  各不相同（07:49 未分发、08:49/09:14 泵停、09:41 tick 未起、
+  10:01 玩家未建、11:24 清旗未返）——仍是客户端侧竞态/状态问题，
+  不是网关字节问题。
+- 清旗未返的根因（commit 内抛错或虚回调阻塞）发生在客户端，与网关
+  无关；网关无任何可观测信号能预判或修复它。
+- 0x9a 的发送路径（直接 serialize 或直接流追加 + flush）同样是客户端
+  内部行为；网关侧收到的 0x9a 字节本身无异常（11 字节，hash 正常）。
+- **禁令维持**：不重排 0x9a burst（0x2f7 后 0x23）、不加盲延时、
+  不重发 0x23、不发任何新消息（尤其 0x29）、不在 0x9a 前探 0x23、
+  不猜 0x9a 发送者的字段修复。下一动作只能是 v27 的一次追踪会话，
+  待其判别结果再定。
+
+### 24.6 v27 钩子清单（只读、防洪水、禁用 .toNumber()、safeAttach）
+
+沿用 v26 全部钩子（tick26s、idisp26、send26、clone26、clrflag26、
+conn26、regA26/regB26、pdrv1_hb、pdrv2_hb、fdrv_hb、frame_hb、twrap_hb、
+case29、setter23、timeout23、spin24、rearm24、throw_probe、v14–v20
+遗留的创建链与 Melee 链）。新增/改动如下，**全部 safeAttach 包裹，
+全部用 .toInt32()/toString()，不得用 .toNumber()**：
+
+1. **清旗链阻塞点**（区分 A 异常死 / B 虚回调阻塞）：
+   - clrflag27：0x14212cb20 入口 + 出口，记 rcx、[rcx+8]、**returnAddress**、
+     线程 id。出口缺失 + throw 触发 → A；出口缺失 + throw 无 → B。
+   - ae90_27：0x14212ae90 入口 + 出口（应极快返回；出口缺失则卡在此）。
+   - reset27：0x14211fdb0 入口 + 出口（记 rcx 会话）。
+   - commit27：0x14167b3f0 入口 + 出口（提交稀少，全记；入口有、出口无
+     → 卡在 commit 内，再按 24.1 的虚调用点细分）。
+   - throw27：0x142c14380 入口，记 returnAddress + 线程 id（实例期应稀少；
+     若在 clear 窗口内触发，即 A 的直接证据）。
+2. **0x9a 原始写点**（三路 choke 点，C→S 发量小，不洪水）：
+   - ser9a27：serialize 0x141f38ae0 入口，记 [rcx+8] 的 id（u16）、rdx 流指针、
+     returnAddress。send26 静默而此处 id=0x9a 触发 → 直接 serialize 路径，
+     returnAddress 即原始构造器。
+   - app9a27：流追加 0x142197fb0 入口，**仅当 r8==11 且 buf 前 2 字节为
+     00 9A 时记**（精确 0x9a 签名，零洪水）；触发 → 直接流追加路径，
+     returnAddress 即原始组包点。
+   - flush27：流冲刷 0x142198110 入口，记 rcx 流指针 + returnAddress，
+     上限 5000 行后只计数（帧内驱动若每帧冲刷，此量可控）。
+   - ser1_27（对照）：帧内 serialize 0x141f4b8a0 计数（应为 id 1 的 2 字节
+     消息，确认帧内驱动与 0x9a 无关）。
+3. **帧内泵驱动出入 + 队列**：
+   - pdrv27：0x1420e6d40 入口，记 rcx 对象指针、[rcx+0xec8] 流指针、
+     returnAddress；**同一 rcx 只记首次**，其余只计数（4950 次不刷屏）。
+     与 tick 会话指针、[session+0x20f8] 比对定归属。
+   - pdrv2_27：后台泵 0x14272fca0 入口，记流参数 + returnAddress（稀少，全记）。
+   - getA27/getB27：0x14010cea0 / 0x141003f00 出口，记返回值（判定帧内
+     驱动泵的是哪类会话）。
+4. **翻转窗口写点**（采样 brackets + 线程判定）：
+   - 以 tick 会话指针为准，在 commit27 出入、world_register、wfactory、
+     ifactory、pumpsec23、pump023_out、clrflag27 入口各采样一次
+     [session+0x272a] 并记线程 id；最后 0 与首 1 之间的区间即翻转区间。
+   - rearm1e27：0x1e case 的重臂点 0x142122c5c 入口，记 al（r12d）与旧
+     [r15+0x272b] 值——定 0x1e case 是挂起还是解除 0x9a 重臂（与翻转无关，
+     但补齐重臂语义）。
+5. **部署门**：node --check 必过才传（v21 教训）；PC 回读 hash；
+   runner 验活（WMI 脱离会话，见 02:17 教训）；客户端重进才加载新探针；
+   严格时间戳过滤复核（10:01 教训）。
+
+### 24.7 读序
+
+1. throw27 + clrflag27/ae90_27/reset27/commit27 的出入（定 A/B 与卡点）
+   → 2. ser9a27/app9a27/flush27（定 0x9a 原始写路径与构造器）
+   → 3. pdrv27 + getA27/getB27（定帧内泵归属）
+   → 4. 翻转采样 brackets + 线程 id（定翻转区间与线程）
+   → 5. rearm1e27（补重臂语义）。
+   任一步出确定性结论即停，不必等全量；网关动作仍需等 v27 会话判别。

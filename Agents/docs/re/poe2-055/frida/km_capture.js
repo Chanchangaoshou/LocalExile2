@@ -859,13 +859,13 @@ let cloneCnt26 = 0;
 safeAttach('clone26', '0x141f38c00', {
   onEnter(args) { cloneCnt26++; let sid = rU16_25(args[0], 8); if (sid === 0x9a || cloneCnt26 <= 10) send({ ev: 'clone26', n: cloneCnt26, srcId: sid, ra: this.returnAddress.toString() }); else if (cloneCnt26 % 500 === 0) send({ ev: 'clone26_cnt', n: cloneCnt26 }); }
 });
-safeAttach('clrflag26', '0x14212cb20', {
-  onEnter(args) { let g = args[0]; let sess = ''; try { sess = g.add(8).readPointer().toString(); } catch (e) {} this.g26 = g.toString(); this.s26 = sess; let fb = -1; try { fb = g.add(8).readPointer().add(0x272a).readU8(); } catch (e) {} this.fb26 = fb; send({ ev: 'clrflag26', grp: this.g26, sess: sess, before: fb }); },
-  onLeave(ret) { let fa = -1; try { fa = this.s26 === '' ? -1 : ptr(this.s26).add(0x272a).readU8(); } catch (e) {} send({ ev: 'clrflag26_out', sess: this.s26, after: fa }); }
+safeAttach('clrflag27', '0x14212cb20', {
+  onEnter(args) { let g = args[0]; let sess = ''; try { sess = g.add(8).readPointer().toString(); } catch (e) {} this.g27 = g.toString(); this.s27 = sess; let fb = -1; try { fb = g.add(8).readPointer().add(0x272a).readU8(); } catch (e) {} this.fb27 = fb; let tid = -1; try { tid = this.threadId; } catch (e) {} send({ ev: 'clrflag27', grp: this.g27, sess: sess, before: fb, ra: this.returnAddress.toString(), tid: tid }); },
+  onLeave(ret) { let fa = -1; try { fa = this.s27 === '' ? -1 : ptr(this.s27).add(0x272a).readU8(); } catch (e) {} send({ ev: 'clrflag27_out', sess: this.s27, after: fa }); }
 });
 let tick26Cnt = 0; let tick26Last = '';
 safeAttach('tick26s', '0x142120cf0', {
-  onEnter(args) { tick26Cnt++; let s = args[0].toString(); let sig = s + '/' + rU8_25(args[0], 0x272a) + '/' + rU32_23(args[0], 0x2270); if (sig !== tick26Last || tick26Cnt % 30 === 0) { tick26Last = sig; send({ ev: 'tick26s', n: tick26Cnt, sig: sig }); } }
+  onEnter(args) { tick26Cnt++; try { flipSess27 = args[0]; } catch (e) {} let s = args[0].toString(); let sig = s + '/' + rU8_25(args[0], 0x272a) + '/' + rU32_23(args[0], 0x2270); if (sig !== tick26Last || tick26Cnt % 30 === 0) { tick26Last = sig; send({ ev: 'tick26s', n: tick26Cnt, sig: sig }); } }
 });
 safeAttach('conn26', '0x14211eb45', {
   onEnter(args) { let rsi = this.context.rsi; send({ ev: 'conn26', f272a: rU8_25(rsi, 0x272a), f272b: rU8_25(rsi, 0x272b), st: rU32_23(rsi, 0x2270) }); }
@@ -875,3 +875,59 @@ safeAttach('idisp26', '0x14212217d', {
   onEnter(args) { idisp26Cnt++; let id = -1; try { id = this.context.r13.add(8).readU16(); } catch (e) {} send({ ev: 'idisp26', n: idisp26Cnt, id: id }); }
 });
 send({ ev: 'v26_armed' });
+
+// ---- v27: clear-chain death + 0x9a raw write + pump ownership (evening24) ----
+let flipSess27 = null;
+safeAttach('ae90_27', '0x14212ae90', {
+  onEnter(args) { send({ ev: 'ae90_27', ra: this.returnAddress.toString() }); },
+  onLeave(ret) { send({ ev: 'ae90_27_out' }); }
+});
+safeAttach('reset27', '0x14211fdb0', {
+  onEnter(args) { send({ ev: 'reset27', ra: this.returnAddress.toString() }); },
+  onLeave(ret) { send({ ev: 'reset27_out' }); }
+});
+safeAttach('commit27', '0x14167b3f0', {
+  onEnter(args) { let f = -1; try { if (flipSess27 !== null) f = flipSess27.add(0x272a).readU8(); } catch (e) {} send({ ev: 'commit27', flag: f }); },
+  onLeave(ret) { let f = -1; try { if (flipSess27 !== null) f = flipSess27.add(0x272a).readU8(); } catch (e) {} send({ ev: 'commit27_out', flag: f }); }
+});
+let throwCnt27 = 0;
+safeAttach('throw27', '0x142c14380', {
+  onEnter(args) { throwCnt27++; let tid = -1; try { tid = this.threadId; } catch (e) {} if (throwCnt27 <= 50) send({ ev: 'throw27', n: throwCnt27, ra: this.returnAddress.toString(), tid: tid }); else if (throwCnt27 % 100 === 0) send({ ev: 'throw27_cnt', n: throwCnt27 }); }
+});
+let ser9aCnt27 = 0;
+safeAttach('ser9a27', '0x141f38ae0', {
+  onEnter(args) { ser9aCnt27++; let id0 = rU16_25(args[0], 8); let id1 = rU16_25(args[1], 8); if (id0 === 0x9a || id1 === 0x9a || ser9aCnt27 <= 10) send({ ev: 'ser9a27', n: ser9aCnt27, id0: id0, id1: id1, ra: this.returnAddress.toString() }); else if (ser9aCnt27 % 500 === 0) send({ ev: 'ser9a27_cnt', n: ser9aCnt27 }); }
+});
+let app9aCnt27 = 0;
+safeAttach('app9a27', '0x142197fb0', {
+  onEnter(args) { let len = -1; try { len = args[2].toInt32(); } catch (e) {} let b0 = -1; try { b0 = args[1].readU16(); } catch (e) {} if (len === 11 && b0 === 0x9a00) { app9aCnt27++; send({ ev: 'app9a27', n: app9aCnt27, ra: this.returnAddress.toString() }); } }
+});
+let flushCnt27 = 0;
+safeAttach('flush27', '0x142198110', {
+  onEnter(args) { flushCnt27++; if (flushCnt27 <= 100) send({ ev: 'flush27', n: flushCnt27 }); else if (flushCnt27 % 200 === 0) send({ ev: 'flush27_cnt', n: flushCnt27 }); }
+});
+let ser1Cnt27 = 0;
+safeAttach('ser1_27', '0x141f4b8a0', {
+  onEnter(args) { ser1Cnt27++; if (ser1Cnt27 % 1000 === 0) send({ ev: 'ser1_27_cnt', n: ser1Cnt27 }); }
+});
+let pdrvSeen27 = {};
+let pdrvCnt27 = 0;
+safeAttach('pdrv27', '0x1420e6d40', {
+  onEnter(args) { pdrvCnt27++; let rc = args[0].toString(); let ec = ''; try { ec = args[0].add(0xec8).readPointer().toString(); } catch (e) {} if (!pdrvSeen27[rc]) { pdrvSeen27[rc] = 1; send({ ev: 'pdrv27', rc: rc, ec8: ec, ra: this.returnAddress.toString() }); } else if (pdrvCnt27 % 1000 === 0) send({ ev: 'pdrv27_cnt', n: pdrvCnt27 }); }
+});
+let pdrv2Cnt27 = 0;
+safeAttach('pdrv2_27', '0x14272fca0', {
+  onEnter(args) { pdrv2Cnt27++; if (pdrv2Cnt27 % 50 === 0) send({ ev: 'pdrv2_27_cnt', n: pdrv2Cnt27 }); }
+});
+let getA27 = '', getACnt27 = 0;
+safeAttach('getA27', '0x14010cea0', {
+  onLeave(ret) { getACnt27++; let v = ret.toString(); if (v !== getA27 || getACnt27 % 30 === 0) { getA27 = v; send({ ev: 'getA27', n: getACnt27, ret: v }); } }
+});
+let getB27 = '', getBCnt27 = 0;
+safeAttach('getB27', '0x141003f00', {
+  onLeave(ret) { getBCnt27++; let v = ret.toString(); if (v !== getB27 || getBCnt27 % 30 === 0) { getB27 = v; send({ ev: 'getB27', n: getBCnt27, ret: v }); } }
+});
+safeAttach('rearm1e27', '0x142122c5c', {
+  onEnter(args) { let al = -1; try { al = this.context.rax.and(0xff).toInt32(); } catch (e) {} let old = -1; try { old = this.context.r15.add(0x272b).readU8(); } catch (e) {} send({ ev: 'rearm1e27', al: al, old272b: old }); }
+});
+send({ ev: 'v27_armed' });
